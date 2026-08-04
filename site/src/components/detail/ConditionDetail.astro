@@ -1,0 +1,34 @@
+---
+import Prose from '../Prose.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const extra: Record<string, string> = rec.extra ?? {};
+const sevTone: Record<string, string> = {
+  Minor: 'border-line text-muted',
+  Moderate: 'border-gold/40 text-gold',
+  Major: 'border-nonogl/50 text-nonogl',
+  Exceptional: 'border-arcane/50 text-arcane',
+};
+---
+
+<div class="max-w-3xl space-y-5">
+  {rec.severity && (
+    <span class={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${sevTone[rec.severity] ?? 'border-line text-muted'}`}>
+      {rec.severity} condition
+    </span>
+  )}
+  {rec.effect && (
+    <section>
+      <h2 class={LABEL}>Effect</h2>
+      <Prose text={rec.effect} />
+    </section>
+  )}
+  {Object.entries(extra).map(([k, v]) => (
+    <section>
+      <h2 class={LABEL}>{k.replace(/_/g, ' ')}</h2>
+      <Prose text={v} />
+    </section>
+  ))}
+</div>

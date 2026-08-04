@@ -109,6 +109,7 @@ def main() -> int:
     n_changes = changelog.diff_versions(conn, args.version)
     prev = changelog.previous_version(conn, args.version)
 
+    conn.execute("DELETE FROM import_run WHERE version = ?", (args.version,))  # idempotent per version
     conn.execute("UPDATE import_run SET is_current = 0")
     conn.execute(
         """INSERT INTO import_run (version,imported_at,source_hash,is_current,page_count,entity_count,notes)

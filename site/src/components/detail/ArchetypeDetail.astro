@@ -1,0 +1,65 @@
+---
+import Prose from '../Prose.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const panic: Record<string, string> = rec.panic ?? {};
+const SCALES = ['Clear', 'Dark', 'Morbid'];
+const scaleTone: Record<string, string> = {
+  Clear: 'border-ogl/40 text-ogl',
+  Dark: 'border-gold/40 text-gold',
+  Morbid: 'border-nonogl/50 text-nonogl',
+};
+const skills = String(rec.skills || '').replace(/\band\b/gi, ',').split(/[,;.]+/).map((s) => s.trim()).filter(Boolean);
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    {skills.length > 0 && (
+      <div>
+        <h2 class={LABEL}>Skills</h2>
+        <div class="flex flex-wrap gap-1.5">
+          {skills.map((s) => <span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-ink">{s}</span>)}
+        </div>
+      </div>
+    )}
+    {rec.feat_name && (
+      <div>
+        <h2 class={LABEL}>Granted Feat</h2>
+        <p class="text-sm font-medium text-ink">{rec.feat_name}</p>
+      </div>
+    )}
+    {rec.panic_response && (
+      <div>
+        <h2 class={LABEL}>Panic Response</h2>
+        <p class="text-sm font-medium text-gold">{rec.panic_response}</p>
+      </div>
+    )}
+  </aside>
+
+  <div class="min-w-0 space-y-6 lg:order-1">
+    {rec.quote && <p class="border-l-2 border-gold/40 pl-3 text-[15px] italic text-muted">“{rec.quote}”</p>}
+    {rec.feat_effect && (
+      <section>
+        <h2 class={LABEL}>{rec.feat_name || 'Feat'}</h2>
+        <Prose text={rec.feat_effect} />
+      </section>
+    )}
+    {Object.keys(panic).length > 0 && (
+      <section>
+        <h2 class={LABEL}>Panic Response — {rec.panic_response}</h2>
+        {rec.panic_flavor && <p class="mb-2 text-sm italic text-faint">“{rec.panic_flavor}”</p>}
+        <p class="mb-3 text-xs text-faint">When you Panic, every effect at your current Corruption scale and below occurs.</p>
+        <div class="space-y-2">
+          {SCALES.filter((s) => panic[s]).map((s) => (
+            <div class={`rounded-lg border bg-surface px-3.5 py-2.5 ${scaleTone[s] ?? 'border-line'}`}>
+              <div class="text-[11px] font-semibold uppercase tracking-wide">{s}</div>
+              <p class="mt-0.5 text-sm text-muted" style="white-space: pre-line">{panic[s]}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+</div>

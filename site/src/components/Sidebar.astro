@@ -1,0 +1,96 @@
+---
+import { sectionsByGroup } from '../lib/sections';
+import { loadMeta, countFor } from '../lib/data';
+
+interface Props {
+  currentPath: string;
+}
+const { currentPath } = Astro.props;
+const groups = sectionsByGroup();
+const meta = loadMeta();
+const active = (route: string) =>
+  currentPath === `/${route}` || currentPath.startsWith(`/${route}/`);
+// Compact entry counts (3,846 -> 3.8k) so the nav doubles as a data map.
+const compact = (n: number) =>
+  n >= 1000 ? `${(n / 1000).toFixed(n < 9950 ? 1 : 0).replace(/\.0$/, '')}k` : String(n);
+---
+
+<aside
+  id="app-sidebar"
+  class="fixed left-0 top-14 z-40 h-[calc(100vh-3.5rem)] w-64 shrink-0 -translate-x-full overflow-y-auto border-r border-line bg-base transition-transform duration-200 lg:sticky lg:translate-x-0 lg:self-start"
+>
+  <nav class="px-3 py-4">
+    {
+      groups.map((g) => (
+        <div class="mb-5">
+          <div class="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-faint">
+            {g.group}
+          </div>
+          <ul class="space-y-0.5">
+            {g.sections.map((s) => (
+              <li>
+                <a
+                  href={`/${s.route}`}
+                  class:list={[
+                    'group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13.5px] transition',
+                    active(s.route)
+                      ? 'bg-gold/10 text-ink'
+                      : 'text-muted hover:bg-surface hover:text-ink',
+                  ]}
+                >
+                  <i
+                    class:list={[
+                      'ti',
+                      s.icon,
+                      'text-[15px]',
+                      active(s.route) ? 'text-gold' : 'text-faint group-hover:text-muted',
+                    ]}
+                    aria-hidden="true"
+                  />
+                  <span class="min-w-0 flex-1 truncate">{s.label}</span>
+                  <span class="font-mono text-[10px] text-faint">{compact(countFor(meta, s.kind))}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+    <div class="mt-2 space-y-0.5 border-t border-line pt-3">
+      <a
+        href="/changelog"
+        class:list={[
+          'group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13.5px] transition',
+          currentPath.startsWith('/changelog')
+            ? 'bg-gold/10 text-ink'
+            : 'text-muted hover:bg-surface hover:text-ink',
+        ]}
+      >
+        <i
+          class:list={[
+            'ti ti-versions text-[15px]',
+            currentPath.startsWith('/changelog') ? 'text-gold' : 'text-faint group-hover:text-muted',
+          ]}
+          aria-hidden="true"></i>
+        Changelog
+      </a>
+      <a
+        href="/about"
+        class:list={[
+          'group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13.5px] transition',
+          currentPath.startsWith('/about')
+            ? 'bg-gold/10 text-ink'
+            : 'text-muted hover:bg-surface hover:text-ink',
+        ]}
+      >
+        <i
+          class:list={[
+            'ti ti-info-circle text-[15px]',
+            currentPath.startsWith('/about') ? 'text-gold' : 'text-faint group-hover:text-muted',
+          ]}
+          aria-hidden="true"></i>
+        About
+      </a>
+    </div>
+  </nav>
+</aside>

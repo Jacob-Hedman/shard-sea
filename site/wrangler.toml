@@ -1,0 +1,5 @@
+# Cloudflare Pages configuration (direct-upload deploys via `npm run deploy`).
+# The functions/ directory at the repo root provides the edge auth middleware.
+name = "shard-sea-codex"
+compatibility_date = "2026-07-01"
+pages_build_output_dir = "dist"

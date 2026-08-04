@@ -1,0 +1,33 @@
+---
+import Prose from '../Prose.astro';
+import StatBlock from '../StatBlock.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const rows = [
+  { label: 'Type', value: rec.armor_kind },
+  { label: 'Tier', value: rec.tier != null ? String(rec.tier) : '' },
+  { label: 'Cost', value: rec.cost },
+  { label: 'Bulk', value: rec.bulk },
+  { label: 'Durability', value: rec.durability },
+  { label: 'Movement Penalty', value: rec.movement_penalty },
+  { label: 'Resources', value: rec.resources },
+  { label: 'Rating', value: rec.rating },
+];
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <StatBlock rows={rows} />
+  </aside>
+  <div class="min-w-0 space-y-5 lg:order-1">
+    {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
+    {rec.special && (
+      <section>
+        <h2 class={LABEL}>Special</h2>
+        <Prose text={rec.special} />
+      </section>
+    )}
+  </div>
+</div>

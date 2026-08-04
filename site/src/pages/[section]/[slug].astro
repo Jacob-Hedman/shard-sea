@@ -1,0 +1,28 @@
+---
+import Layout from '../../components/Layout.astro';
+import EntityDetail from '../../components/EntityDetail.astro';
+import { SECTIONS, sectionByRoute } from '../../lib/sections';
+import { cleanProse } from '../../lib/format';
+import { loadFull } from '../../lib/data';
+
+export function getStaticPaths() {
+  const paths: any[] = [];
+  for (const s of SECTIONS) {
+    for (const rec of loadFull(s.kind)) {
+      paths.push({ params: { section: s.route, slug: rec.slug }, props: { rec } });
+    }
+  }
+  return paths;
+}
+
+const { rec } = Astro.props;
+const section = sectionByRoute(Astro.params.section!);
+const description =
+  cleanProse(rec.summary ?? rec.effects ?? rec.text ?? '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 155) || `${rec.name} — Shard-sea ${section?.singular ?? ''}`;
+---
+
+<Layout title={rec.name} description={description}>
+  <EntityDetail rec={rec} />
+</Layout>

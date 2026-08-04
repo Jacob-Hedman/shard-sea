@@ -1,0 +1,54 @@
+---
+import Prose from '../Prose.astro';
+import StatBlock from '../StatBlock.astro';
+import { hrefFor } from '../../lib/sections';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const rows = [
+  { label: 'Discipline', value: rec.discipline_name },
+  { label: 'Skill', value: rec.skill },
+  { label: rec.record === 'Prayer' ? 'Prayer' : 'Tier', value: rec.feat_tier != null ? String(rec.feat_tier) : '' },
+  { label: 'AP', value: rec.ap },
+  { label: 'Qualities', value: rec.qualities },
+].filter((r) => r.value && String(r.value).trim());
+const qualities = String(rec.qualities || '').split(/[,/|]+/).map((s) => s.trim()).filter(Boolean);
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_20rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <StatBlock rows={rows} />
+    {rec.discipline_slug && (
+      <a href={hrefFor('discipline', rec.discipline_slug)} class="inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
+        <i class="ti ti-arrow-left text-sm" aria-hidden="true"></i>All of {rec.discipline_name}
+      </a>
+    )}
+    {qualities.length > 0 && (
+      <div>
+        <h2 class={LABEL}>Qualities</h2>
+        <div class="flex flex-wrap gap-1.5">
+          {qualities.map((qy) => (
+            <span class="rounded-md border border-line bg-surface px-2 py-1 text-xs text-muted">{qy}</span>
+          ))}
+        </div>
+      </div>
+    )}
+  </aside>
+
+  <div class="min-w-0 space-y-5 lg:order-1">
+    {rec.flavor && <p class="border-l-2 border-gold/40 pl-3 text-[15px] italic text-muted">“{rec.flavor}”</p>}
+    {rec.effect && (
+      <section>
+        <h2 class={LABEL}>Effect</h2>
+        <Prose text={rec.effect} />
+      </section>
+    )}
+    {rec.limits && (
+      <section>
+        <h2 class={LABEL}>Limits</h2>
+        <Prose text={rec.limits} />
+      </section>
+    )}
+  </div>
+</div>

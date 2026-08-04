@@ -1,0 +1,32 @@
+---
+import Layout from '../components/Layout.astro';
+---
+
+<Layout title="Page not found" description="This page rolled a natural 1.">
+  <div class="mx-auto max-w-xl py-16 text-center sm:py-24">
+    <p class="font-mono text-7xl font-bold tracking-tight">
+      <span class="bg-gradient-to-br from-ink to-gold bg-clip-text text-transparent">404</span>
+    </p>
+    <h1 class="mt-4 text-2xl font-bold tracking-tight text-ink">Natural 1 — page not found</h1>
+    <p class="mt-2 text-sm leading-relaxed text-muted">
+      The page you're after doesn't exist, was renamed, or failed its saving throw. Try a search —
+      every entry in the codex is indexed.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-2.5">
+      <button
+        type="button"
+        data-search-open
+        class="inline-flex items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-4 py-2 text-sm font-medium text-gold-strong transition hover:bg-gold/20"
+      >
+        <i class="ti ti-search text-sm" aria-hidden="true"></i> Search the codex
+        <kbd class="rounded border border-gold/30 px-1 font-mono text-[10px]">⌘K</kbd>
+      </button>
+      <a
+        href="/"
+        class="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm text-muted transition hover:border-line-strong hover:text-ink"
+      >
+        <i class="ti ti-home text-sm" aria-hidden="true"></i> Back to the front page
+      </a>
+    </div>
+  </div>
+</Layout>

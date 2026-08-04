@@ -1,0 +1,34 @@
+---
+import { renderMarkdown } from '../../lib/md';
+import { hrefFor } from '../../lib/sections';
+import { loadFull } from '../../lib/data';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const html = renderMarkdown(rec.body_md);
+
+// Records extracted from this same source file (so a chapter links to its entries).
+const KINDS = ['discipline', 'feat', 'rune', 'weapon', 'armor', 'material', 'archetype', 'condition', 'action'];
+const related: { kind: string; name: string; slug: string }[] = [];
+for (const k of KINDS) {
+  for (const r of loadFull(k) as any[]) {
+    if (r.source_path === rec.source_path || r.page_slug === rec.slug) related.push({ kind: k, name: r.name, slug: r.slug });
+  }
+}
+---
+
+<div class:list={[related.length > 0 && 'lg:grid lg:grid-cols-[1fr_16rem] lg:gap-8']}>
+  {related.length > 0 && (
+    <aside class="mb-6 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">On this page</h2>
+      <ul class="space-y-0.5">
+        {related.slice(0, 60).map((r) => (
+          <li><a href={hrefFor(r.kind, r.slug)} class="text-sm text-muted transition hover:text-gold">{r.name}</a></li>
+        ))}
+      </ul>
+    </aside>
+  )}
+  <div class="min-w-0 lg:order-1">
+    <div class="page-prose max-w-3xl" set:html={html} />
+  </div>
+</div>

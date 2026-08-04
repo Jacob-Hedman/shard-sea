@@ -1,0 +1,25 @@
+---
+// Progressive "show more": content renders in full by default; a tiny inline
+// script (in Layout) measures it and, only if it's taller than `lines`, adds
+// `.clamped` + reveals the toggle. So no-JS users still see everything.
+interface Props {
+  lines?: number;
+  class?: string;
+}
+const { lines = 6, class: cls = '' } = Astro.props;
+---
+
+<div class:list={['clampable', cls]} data-clampable style={`--clamp-lines:${lines}`}>
+  <div class="clampable-body"><slot /></div>
+  <button
+    type="button"
+    data-clamp-toggle
+    aria-expanded="false"
+    hidden
+    class="clampable-toggle mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-gold transition hover:text-gold-strong"
+  >
+    <span class="c-more">Show more</span>
+    <span class="c-less">Show less</span>
+    <i class="ti ti-chevron-down c-chev text-sm" aria-hidden="true"></i>
+  </button>
+</div>

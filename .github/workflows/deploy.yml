@@ -1,0 +1,44 @@
+name: Deploy to Cloudflare Pages
+
+# Push-to-deploy: every push to main builds the site (in site/) and deploys it
+# plus the functions/ auth middleware to the shard-sea-codex Pages project. The
+# project's SITE_PASSWORD / SESSION_SECRET secrets live on Cloudflare and persist
+# across deploys — not needed here. Only a CLOUDFLARE_API_TOKEN repo secret
+# (permission: Account · Cloudflare Pages · Edit) is required.
+#
+# NOTE: this workflow file lives at site/.github/workflows/deploy.yml in the repo
+# during development; to activate CI it must sit at .github/workflows/deploy.yml
+# in the repo ROOT. See site/README for the one-time setup.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: site/.nvmrc
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: f88d80f36c0f36bdf2f49e6d522fc82c
+          workingDirectory: site
+          command: pages deploy dist --project-name shard-sea-codex --branch main

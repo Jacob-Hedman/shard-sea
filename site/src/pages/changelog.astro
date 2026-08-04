@@ -1,0 +1,134 @@
+---
+import Layout from '../components/Layout.astro';
+import { loadChanges } from '../lib/data';
+import { hrefFor, labelMap } from '../lib/sections';
+
+const { current, versions, changelog } = loadChanges();
+const HEADING = 'text-[13px] font-semibold uppercase tracking-[0.08em] text-muted';
+const fmtDate = (s?: string) => (s ? s.slice(0, 10) : '');
+
+// group a flat list of {kind,name,slug,...} by kind for tidy display
+function byKind(list: any[]) {
+  const m = new Map<string, any[]>();
+  for (const c of list) (m.get(c.kind) ?? m.set(c.kind, []).get(c.kind)!).push(c);
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+const kindLabel = (k: string, n: number) => `${labelMap[k] ?? k}${n === 1 ? '' : 's'}`;
+---
+
+<Layout title="Changelog" description="Exactly what changed in each version of the Kriegsmesser PHB.">
+  <div class="mx-auto max-w-4xl space-y-10">
+    <header>
+      <h1 class="text-3xl font-bold tracking-tight text-ink sm:text-4xl">Changelog</h1>
+      <p class="mt-2 text-sm text-faint">
+        Every version of the Kriegsmesser PHB, with the exact entries that were added, removed or changed.
+        The site always shows the latest version (<span class="font-mono text-muted">{current}</span>).
+      </p>
+      {versions.length > 1 && (
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          {versions.map((v) => (
+            <a href={`#${v.version}`} class="rounded-md border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-muted transition hover:border-gold/40 hover:text-gold">
+              {v.version}
+            </a>
+          ))}
+        </div>
+      )}
+    </header>
+
+    {changelog.map((b: any) => {
+      const isBaseline = (b.baseline?.length ?? 0) > 0 && !b.added?.length && !b.removed?.length && !b.modified?.length;
+      const nAdded = b.added?.length ?? 0;
+      const nRemoved = b.removed?.length ?? 0;
+      const nMod = b.modifiedGrouped?.length ?? 0;
+      return (
+        <section id={b.version_to} class="scroll-mt-20">
+          <div class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-2">
+            <h2 class="font-mono text-xl font-bold text-ink">{b.version_to}</h2>
+            {b.imported_at && <span class="font-mono text-xs text-faint">{fmtDate(b.imported_at)}</span>}
+            {!isBaseline && b.version_from && (
+              <span class="text-xs text-faint">compared to <span class="font-mono">{b.version_from}</span></span>
+            )}
+            {!isBaseline && (
+              <div class="ml-auto flex gap-2 font-mono text-[11px]">
+                {nAdded > 0 && <span class="text-ogl">+{nAdded}</span>}
+                {nRemoved > 0 && <span class="text-nonogl">−{nRemoved}</span>}
+                {nMod > 0 && <span class="text-gold">~{nMod}</span>}
+              </div>
+            )}
+          </div>
+
+          {isBaseline ? (
+            <div class="space-y-2">
+              <p class="text-sm text-muted">Initial import. The database was seeded with:</p>
+              <ul class="grid gap-1 sm:grid-cols-2">
+                {b.baseline.map((c: any) => (
+                  <li class="flex items-center gap-2 text-sm text-muted">
+                    <span class="h-1 w-1 rounded-full bg-gold/60" aria-hidden="true" />{c.summary}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div class="space-y-6">
+              {nAdded > 0 && (
+                <div>
+                  <h3 class={`${HEADING} mb-2 text-ogl`}>Added — {nAdded}</h3>
+                  {byKind(b.added).map(([k, list]) => (
+                    <div class="mb-2">
+                      <div class="mb-1 text-[11px] uppercase tracking-wide text-faint">{kindLabel(k, list.length)}</div>
+                      <div class="flex flex-wrap gap-1.5">
+                        {list.map((c: any) => (
+                          <a href={hrefFor(c.kind, c.slug)} class="rounded-md border border-ogl/30 bg-ogl/5 px-2 py-0.5 text-xs text-ink transition hover:border-ogl/60">{c.name}</a>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {nRemoved > 0 && (
+                <div>
+                  <h3 class={`${HEADING} mb-2 text-nonogl`}>Removed — {nRemoved}</h3>
+                  {byKind(b.removed).map(([k, list]) => (
+                    <div class="mb-2">
+                      <div class="mb-1 text-[11px] uppercase tracking-wide text-faint">{kindLabel(k, list.length)}</div>
+                      <div class="flex flex-wrap gap-1.5">
+                        {list.map((c: any) => (
+                          <span class="rounded-md border border-nonogl/30 bg-nonogl/5 px-2 py-0.5 text-xs text-muted line-through">{c.name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {nMod > 0 && (
+                <div>
+                  <h3 class={`${HEADING} mb-2 text-gold`}>Changed — {nMod}</h3>
+                  <ul class="space-y-2.5">
+                    {b.modifiedGrouped.map((m: any) => (
+                      <li class="card p-3.5">
+                        <a href={hrefFor(m.kind, m.slug)} class="font-semibold text-ink hover:text-gold">{m.name}</a>
+                        <span class="ml-2 text-[11px] uppercase tracking-wide text-faint">{labelMap[m.kind] ?? m.kind}</span>
+                        <ul class="mt-1.5 space-y-1">
+                          {m.changes.map((ch: any) => (
+                            <li class="text-sm text-muted">
+                              <span class="font-medium text-ink">{ch.field}:</span>{' '}
+                              {ch.old_value != null && <span class="text-faint line-through">{ch.old_value}</span>}
+                              {ch.old_value != null && ch.new_value != null && <span class="text-faint"> → </span>}
+                              {ch.new_value != null && <span class="text-ink">{ch.new_value}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      );
+    })}
+  </div>
+</Layout>

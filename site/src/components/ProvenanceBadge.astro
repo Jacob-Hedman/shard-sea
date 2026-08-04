@@ -1,0 +1,34 @@
+---
+import { contentTypeBadge, licenseBadge, titleCase } from '../lib/format';
+
+interface Props {
+  source?: string;
+  content_type?: string;
+  license?: string;
+  edition?: string;
+  compact?: boolean;
+}
+const { source, content_type, license, edition, compact = false } = Astro.props;
+const pill =
+  'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap';
+---
+
+<div class="flex flex-wrap items-center gap-1.5">
+  {source && <span class={`${pill} border-line bg-surface text-faint`} title="Source">{source}</span>}
+  {
+    edition === '3.0' && (
+      <span
+        class={`${pill} border-nonogl/50 bg-nonogl/10 text-nonogl`}
+        title="3.0 edition material — this archive has no 3.5 update for it. Using 3.0 content is the DM's call."
+      >
+        3.0 edition
+      </span>
+    )
+  }
+  {
+    content_type && content_type !== 'official' && (
+      <span class={`${pill} ${contentTypeBadge(content_type)}`}>{titleCase(content_type)}</span>
+    )
+  }
+  {!compact && license && <span class={`${pill} ${licenseBadge(license)}`}>{license}</span>}
+</div>

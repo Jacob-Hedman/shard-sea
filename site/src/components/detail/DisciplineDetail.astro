@@ -1,0 +1,76 @@
+---
+import Prose from '../Prose.astro';
+import { hrefFor } from '../../lib/sections';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const feats: any[] = rec.feats ?? [];
+const runes: any[] = rec.runes ?? [];
+// group runes by their tier group ("Tier 1 Runes", ...)
+const runeGroups = new Map<string, any[]>();
+for (const r of runes) {
+  const g = r.group || 'Runes';
+  (runeGroups.get(g) ?? runeGroups.set(g, []).get(g)!).push(r);
+}
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <dl class="card px-4 py-1.5">
+      {rec.skill && (
+        <div class="stat-row"><dt>Skill</dt><dd class="text-ink">{rec.skill}</dd></div>
+      )}
+      <div class="stat-row"><dt>Feats</dt><dd class="text-ink">{feats.length}</dd></div>
+      {rec.is_special && (
+        <div class="stat-row"><dt>Kind</dt><dd class="text-gold">Special discipline</dd></div>
+      )}
+    </dl>
+    {rec.passive && (
+      <div>
+        <h2 class={LABEL}>Passive Effect</h2>
+        <Prose text={rec.passive} class="text-sm" />
+      </div>
+    )}
+  </aside>
+
+  <div class="min-w-0 space-y-6 lg:order-1">
+    {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
+
+    {feats.length > 0 && (
+      <section>
+        <h2 class={LABEL}>{feats[0]?.record === 'Prayer' ? 'Prayers' : 'Feats'}</h2>
+        <ol class="space-y-2.5">
+          {feats.map((fe) => (
+            <li class="card p-3.5">
+              <div class="flex items-baseline gap-2">
+                <span class="font-mono text-[11px] text-faint">T{fe.tier ?? '?'}</span>
+                <a href={hrefFor('feat', fe.slug)} class="font-semibold text-ink hover:text-gold">{fe.name}</a>
+                {fe.ap && <span class="ml-auto font-mono text-[11px] text-faint">AP {fe.ap}</span>}
+              </div>
+              {fe.flavor && <p class="mt-0.5 text-xs italic text-faint">“{fe.flavor}”</p>}
+              {fe.effect && <p class="mt-1 text-sm leading-snug text-muted" style="white-space: pre-line">{fe.effect}</p>}
+            </li>
+          ))}
+        </ol>
+      </section>
+    )}
+
+    {[...runeGroups.entries()].map(([g, list]) => (
+      <section>
+        <h2 class={LABEL}>{g}</h2>
+        <ol class="space-y-2.5">
+          {list.map((r) => (
+            <li class="card p-3.5">
+              <div class="flex items-baseline gap-2">
+                <a href={hrefFor('rune', r.slug)} class="font-semibold text-ink hover:text-gold">{r.name}</a>
+                {r.rune_class && <span class="ml-auto rounded border border-line bg-surface-2 px-1.5 font-mono text-[10px] text-faint">{r.rune_class}</span>}
+              </div>
+              {r.effect && <p class="mt-1 text-sm leading-snug text-muted" style="white-space: pre-line">{r.effect}</p>}
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+  </div>
+</div>

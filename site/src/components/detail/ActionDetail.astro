@@ -1,0 +1,37 @@
+---
+import Prose from '../Prose.astro';
+import StatBlock from '../StatBlock.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const extra: Record<string, string> = rec.extra ?? {};
+const rows = [
+  { label: 'Type', value: rec.action_type },
+  { label: 'AP', value: rec.ap },
+  { label: 'Duration', value: rec.attrs?.Duration },
+  { label: 'Range', value: rec.attrs?.Range },
+  { label: 'Resist', value: rec.attrs?.Resist },
+  { label: 'Qualities', value: rec.attrs?.Qualities },
+];
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
+  <aside class="mb-6 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <StatBlock rows={rows} />
+  </aside>
+  <div class="min-w-0 space-y-5 lg:order-1">
+    {rec.effect && (
+      <section>
+        <h2 class={LABEL}>Effect</h2>
+        <Prose text={rec.effect} />
+      </section>
+    )}
+    {Object.entries(extra).map(([k, v]) => (
+      <section>
+        <h2 class={LABEL}>{k.replace(/_/g, ' ')}</h2>
+        <Prose text={v} />
+      </section>
+    ))}
+  </div>
+</div>

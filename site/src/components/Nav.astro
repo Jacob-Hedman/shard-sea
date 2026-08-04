@@ -1,0 +1,90 @@
+---
+import { sectionsByGroup, SECTIONS } from '../lib/sections';
+const groups = sectionsByGroup();
+const primary = ['classes', 'spells', 'feats', 'items']
+  .map((r) => SECTIONS.find((s) => s.route === r)!)
+  .filter(Boolean);
+const navlink = 'rounded-md px-3 py-1.5 text-sm text-muted transition hover:bg-surface-2 hover:text-ink';
+---
+
+<header class="sticky top-0 z-40 border-b border-line bg-base/80 backdrop-blur-md">
+  <nav class="mx-auto flex h-14 max-w-[90rem] items-center gap-2 px-4 sm:px-6 lg:px-8">
+    <a href="/" class="group flex items-center gap-2 pr-2">
+      <svg class="h-7 w-7 text-gold transition group-hover:rotate-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z"></path>
+        <path d="M12 2v20M3 7l9 4 9-4M3 17l9-4 9 4M12 6.5 7.5 9v5l4.5 2.5L16.5 14V9L12 6.5Z" opacity="0.5"></path>
+      </svg>
+      <span class="font-display text-lg font-semibold tracking-wide text-ink">D&amp;D 3.5 <span class="text-gold">Codex</span></span>
+    </a>
+
+    <div class="hidden items-center gap-0.5 md:flex">
+      {primary.map((s) => <a href={`/${s.route}`} class={navlink}>{s.label}</a>)}
+      <button type="button" data-menu-toggle class={`${navlink} inline-flex items-center gap-1`}>
+        Browse all
+        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+    </div>
+
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        type="button"
+        data-search-open
+        class="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-faint transition hover:border-line-strong hover:text-muted"
+      >
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <span class="hidden sm:inline">Search…</span>
+        <kbd class="hidden rounded border border-line bg-surface-2 px-1.5 text-[10px] md:inline">/</kbd>
+      </button>
+      <button type="button" data-mobile-toggle class="rounded-md p-2 text-muted hover:bg-surface-2 md:hidden" aria-label="Menu">
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Browse-all mega panel (desktop) -->
+  <div data-menu-panel class="hidden border-t border-line bg-surface/95 backdrop-blur-md">
+    <div class="mx-auto grid max-w-[90rem] grid-cols-2 gap-x-6 gap-y-5 px-4 py-6 sm:px-6 md:grid-cols-3 lg:grid-cols-5 lg:px-8">
+      {groups.map((g) => (
+        <div>
+          <div class="mb-2 font-display text-xs uppercase tracking-widest text-gold">{g.group}</div>
+          <ul class="space-y-0.5">
+            {g.sections.map((s) => (
+              <li><a href={`/${s.route}`} class="block rounded px-2 py-1 text-sm text-muted hover:bg-surface-2 hover:text-ink">{s.label}</a></li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <!-- Mobile panel -->
+  <div data-mobile-panel class="hidden border-t border-line bg-surface/95 md:hidden">
+    <div class="grid grid-cols-2 gap-1 px-4 py-4">
+      {SECTIONS.map((s) => (
+        <a href={`/${s.route}`} class="rounded-md px-3 py-2 text-sm text-muted hover:bg-surface-2 hover:text-ink">{s.label}</a>
+      ))}
+    </div>
+  </div>
+</header>
+
+<script is:inline>
+  (() => {
+    const toggle = (panelSel, btnSel) => {
+      const panel = document.querySelector(panelSel);
+      const btn = document.querySelector(btnSel);
+      if (!panel || !btn) return;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        panel.classList.toggle('hidden');
+      });
+    };
+    toggle('[data-menu-panel]', '[data-menu-toggle]');
+    toggle('[data-mobile-panel]', '[data-mobile-toggle]');
+    document.addEventListener('click', (e) => {
+      const mega = document.querySelector('[data-menu-panel]');
+      if (mega && !mega.classList.contains('hidden') && !e.target.closest('[data-menu-panel]') && !e.target.closest('[data-menu-toggle]')) {
+        mega.classList.add('hidden');
+      }
+    });
+  })();
+</script>

@@ -1,0 +1,35 @@
+---
+// Slim sticky top bar: menu toggle (mobile) · brand · global search · GitHub.
+---
+<header transition:persist="topbar" class="sticky top-0 z-40 h-14 border-b border-line bg-base/80 backdrop-blur-md">
+  <div class="mx-auto flex h-full w-full max-w-[100rem] items-center gap-3 px-4 sm:px-6">
+    <button type="button" data-sidebar-toggle class="-ml-1 rounded-md p-2 text-muted transition hover:bg-surface hover:text-ink lg:hidden" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false">
+      <i class="ti ti-menu-2 text-lg" aria-hidden="true"></i>
+    </button>
+
+    <a href="/" class="flex shrink-0 items-center gap-2">
+      <i class="ti ti-triangle-inverted text-xl text-gold" aria-hidden="true"></i>
+      <span class="text-[15px] font-semibold tracking-tight text-ink">Shard-sea Codex</span>
+    </a>
+
+    <button
+      type="button"
+      data-search-open
+      aria-label="Search everything"
+      aria-keyshortcuts="Control+K"
+      class="ml-2 flex min-w-0 max-w-md flex-1 items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-faint transition hover:border-line-strong hover:text-muted"
+    >
+      <i class="ti ti-search text-sm" aria-hidden="true"></i>
+      <span class="hidden truncate sm:inline">Search everything</span>
+      <kbd class="ml-auto hidden rounded border border-line bg-surface-2 px-1.5 font-mono text-[10px] text-faint sm:inline">⌘K</kbd>
+    </button>
+
+    <a
+      href="https://github.com/Jacob-Hedman/shard-sea"
+      class="hidden shrink-0 rounded-md p-2 text-muted transition hover:bg-surface hover:text-ink sm:block"
+      aria-label="Source on GitHub"
+    >
+      <i class="ti ti-brand-github text-lg" aria-hidden="true"></i>
+    </a>
+  </div>
+</header>

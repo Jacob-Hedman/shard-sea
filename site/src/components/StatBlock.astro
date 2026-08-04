@@ -1,0 +1,31 @@
+---
+// A compact definition list of label/value stat rows. Empty / "None" rows drop out.
+interface Row {
+  label: string;
+  value: any;
+}
+interface Props {
+  rows: Row[];
+  class?: string;
+}
+const { rows, class: cls = '' } = Astro.props;
+const items = (rows ?? []).filter(
+  (r) =>
+    r.value != null &&
+    String(r.value).trim() !== '' &&
+    !/^none$/i.test(String(r.value).trim()),
+);
+---
+
+{
+  items.length > 0 && (
+    <dl class={`card px-4 py-1.5 ${cls}`}>
+      {items.map((r) => (
+        <div class="stat-row">
+          <dt>{r.label}</dt>
+          <dd class="text-ink" style="white-space: pre-line" set:text={String(r.value)} />
+        </div>
+      ))}
+    </dl>
+  )
+}

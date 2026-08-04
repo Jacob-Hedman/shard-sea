@@ -1,0 +1,242 @@
+---
+import { routeMap, labelMap, SECTIONS } from '../lib/sections';
+import { loadMeta, countFor } from '../lib/data';
+
+// Section launcher rows (icon + label + entry count) and per-kind icons for
+// result rows — resolved at build, injected via define:vars.
+const meta = loadMeta();
+const sectionRows = SECTIONS.map((s) => ({
+  label: s.label,
+  route: s.route,
+  icon: s.icon,
+  count: countFor(meta, s.kind),
+}));
+const iconMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.icon]));
+---
+
+<div id="search-overlay" transition:persist="search-overlay" role="dialog" aria-modal="true" aria-label="Site search" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-search-close></div>
+  <div class="relative mx-auto mt-[8vh] w-full max-w-xl px-4">
+    <div class="card overflow-hidden shadow-2xl shadow-black/50">
+      <div class="flex items-center gap-2 border-b border-line px-4">
+        <svg class="h-5 w-5 shrink-0 text-faint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path>
+        </svg>
+        <input
+          id="search-input"
+          type="text"
+          aria-label="Search spells, feats, classes, and more"
+          placeholder="Search everything, or jump to a section…"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          class="w-full bg-transparent py-3.5 text-ink outline-none placeholder:text-faint"
+        />
+        <kbd class="hidden rounded border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] text-faint sm:block">Esc</kbd>
+      </div>
+      <div id="search-results" class="max-h-[60vh] overflow-y-auto p-2"></div>
+      <div id="search-hint" class="border-t border-line px-4 py-2 text-xs text-faint">
+        Jump to a section below, or type to search across everything.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script is:inline define:vars={{ routeMap, labelMap, sectionRows, iconMap }}>
+  (() => {
+    // The overlay element is `transition:persist`ed, so it (and these listeners)
+    // survive client-side navigation — bind only once.
+    if (window.__searchInit) return;
+    window.__searchInit = true;
+    const overlay = document.getElementById('search-overlay');
+    const input = document.getElementById('search-input');
+    const results = document.getElementById('search-results');
+    const hint = document.getElementById('search-hint');
+    if (!overlay || !input || !results) return;
+
+    let data = null;
+    let loading = false;
+    let sel = -1;
+    let rows = [];
+
+    async function ensureData() {
+      if (data || loading) return;
+      loading = true;
+      try {
+        const res = await fetch('/data/search.json');
+        data = await res.json();
+      } catch (e) {
+        data = [];
+      }
+      loading = false;
+      if (input.value) render(input.value);
+    }
+
+    function score(name, q) {
+      const n = name.toLowerCase();
+      if (n === q) return 0;
+      if (n.startsWith(q)) return 1;
+      const wb = n.indexOf(' ' + q);
+      if (wb >= 0) return 2;
+      if (n.includes(q)) return 3;
+      return -1;
+    }
+
+    function render(query) {
+      const q = query.trim().toLowerCase();
+      if (!q) {
+        renderSections();
+        hint.textContent = 'Jump to a section below, or type to search across everything.';
+        return;
+      }
+      if (!data) {
+        hint.textContent = 'Loading index…';
+        return;
+      }
+      // honor the persisted content-visibility preference (homebrew is
+      // hidden by default; the home/browse checkboxes flip it)
+      let excluded;
+      try {
+        const v = localStorage.getItem('dnd-exclude-ct');
+        excluded = new Set(v == null ? ['homebrew'] : JSON.parse(v));
+      } catch (e) {
+        excluded = new Set(['homebrew']);
+      }
+      const scored = [];
+      for (const e of data) {
+        if (e.c && excluded.has(e.c)) continue;
+        const s = score(e.n, q);
+        if (s >= 0) scored.push([s, e]);
+      }
+      scored.sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length);
+      rows = scored.slice(0, 40).map((x) => x[1]);
+      sel = rows.length ? 0 : -1;
+
+      results.innerHTML = '';
+      if (!rows.length) {
+        hint.textContent = `No matches for “${query}”.`;
+        return;
+      }
+      hint.textContent = `${scored.length} match${scored.length === 1 ? '' : 'es'}`;
+      rows.forEach((e, i) => {
+        const a = document.createElement('a');
+        a.href = `/${routeMap[e.k] || e.k}/${e.s}`;
+        a.className =
+          'flex items-center gap-3 rounded-lg px-3 py-2 ' +
+          (i === sel ? 'bg-arcane/15' : 'hover:bg-surface-2');
+        a.dataset.idx = String(i);
+        const ic = document.createElement('i');
+        ic.className = 'ti ' + (iconMap[e.k] || 'ti-file') + ' shrink-0 text-[15px] text-faint';
+        ic.setAttribute('aria-hidden', 'true');
+        const left = document.createElement('div');
+        left.className = 'min-w-0 flex-1';
+        const title = document.createElement('div');
+        title.className = 'truncate text-ink';
+        title.textContent = e.n;
+        const subline = document.createElement('div');
+        subline.className = 'truncate text-xs text-faint';
+        subline.textContent = e.b ? e.b : '';
+        left.appendChild(title);
+        if (e.b) left.appendChild(subline);
+        const tag = document.createElement('span');
+        tag.className =
+          'shrink-0 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted';
+        tag.textContent = labelMap[e.k] || e.k;
+        a.appendChild(ic);
+        a.appendChild(left);
+        a.appendChild(tag);
+        results.appendChild(a);
+      });
+    }
+
+    function renderSections() {
+      results.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint';
+      head.textContent = 'Jump to a section';
+      results.appendChild(head);
+      rows = sectionRows.map((s) => ({ n: s.label, route: s.route }));
+      sel = -1;
+      sectionRows.forEach((s, i) => {
+        const a = document.createElement('a');
+        a.href = `/${s.route}`;
+        a.className = 'flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-surface-2';
+        a.dataset.idx = String(i);
+        const ic = document.createElement('i');
+        ic.className = 'ti ' + s.icon + ' shrink-0 text-[15px] text-faint';
+        ic.setAttribute('aria-hidden', 'true');
+        const left = document.createElement('div');
+        left.className = 'min-w-0 flex-1 truncate text-ink';
+        left.textContent = s.label;
+        const count = document.createElement('span');
+        count.className = 'shrink-0 font-mono text-[10px] text-faint';
+        count.textContent = s.count.toLocaleString();
+        a.appendChild(ic);
+        a.appendChild(left);
+        a.appendChild(count);
+        results.appendChild(a);
+      });
+    }
+
+    function setSel(next) {
+      const items = results.querySelectorAll('a');
+      if (!items.length) return;
+      sel = (next + items.length) % items.length;
+      items.forEach((el, i) => {
+        el.classList.toggle('bg-arcane/15', i === sel);
+        el.classList.toggle('hover:bg-surface-2', i !== sel);
+      });
+      items[sel].scrollIntoView({ block: 'nearest' });
+    }
+
+    function open() {
+      overlay.classList.remove('hidden');
+      overlay.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      input.value = '';
+      render('');
+      setTimeout(() => input.focus(), 0);
+      ensureData();
+    }
+    function close() {
+      overlay.classList.add('hidden');
+      overlay.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+    window.openSearch = open;
+
+    // Close the palette when a result (or any link) triggers a navigation.
+    document.addEventListener('astro:after-swap', () => {
+      if (!overlay.classList.contains('hidden')) close();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-search-open]')) {
+        e.preventDefault();
+        open();
+      }
+      if (e.target.closest('[data-search-close]')) close();
+    });
+
+    input.addEventListener('input', () => render(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSel(sel + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(sel - 1); }
+      else if (e.key === 'Enter') {
+        const items = results.querySelectorAll('a');
+        if (items[sel]) window.location.href = items[sel].href;
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !typing)) {
+        e.preventDefault();
+        open();
+      } else if (e.key === 'Escape' && !overlay.classList.contains('hidden')) {
+        close();
+      }
+    });
+  })();
+</script>

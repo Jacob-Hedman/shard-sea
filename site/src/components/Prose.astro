@@ -1,0 +1,28 @@
+---
+import { cleanProse, stripLeadingLabel, highlightRules } from '../lib/format';
+
+// Renders DB prose as readable paragraphs. cleanProse() strips embedded HTML,
+// removes flattened tables, fixes run-on sentences, and splits walls of text.
+interface Props {
+  text?: string | null;
+  class?: string;
+  stripLabel?: string;
+}
+const { text = '', class: cls = '', stripLabel } = Astro.props;
+let t = cleanProse(text);
+if (stripLabel) t = stripLeadingLabel(t, stripLabel);
+const paras = t
+  .split(/\n{2,}/)
+  .map((p) => p.trim())
+  .filter(Boolean);
+---
+
+{
+  paras.length > 0 && (
+    <div class={`prose-dnd ${cls}`}>
+      {paras.map((p) => (
+        <p style="white-space: pre-line" set:html={highlightRules(p)} />
+      ))}
+    </div>
+  )
+}

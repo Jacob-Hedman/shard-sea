@@ -1,0 +1,21 @@
+---
+import { hrefFor } from '../lib/sections';
+import ProvenanceBadge from './ProvenanceBadge.astro';
+
+// Server-rendered card (home featured + detail cross-links). The browse listing
+// renders an equivalent card client-side from the index JSON.
+interface Props {
+  rec: any;
+}
+const { rec } = Astro.props;
+const href = hrefFor(rec.kind, rec.slug);
+---
+
+<a href={href} class="card card-hover flex flex-col p-4">
+  <h3 class="font-display text-lg leading-tight text-ink">{rec.name}</h3>
+  {rec.sub && <p class="mt-0.5 text-sm text-arcane/90">{rec.sub}</p>}
+  {rec.desc && <p class="mt-2 line-clamp-2 text-sm text-muted">{rec.desc}</p>}
+  <div class="mt-3 pt-1">
+    <ProvenanceBadge source={rec.source} content_type={rec.content_type} compact />
+  </div>
+</a>
