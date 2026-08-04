@@ -1,0 +1,7 @@
+# Keep the vendored PHB source bytes exactly as authored (stable source_hash, clean diffs)
+sources/** -text
+*.webp binary
+*.db binary
+
+# Normalize line endings for everything else
+* text=auto

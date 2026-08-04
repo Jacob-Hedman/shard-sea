@@ -1,0 +1,119 @@
+"""Text / markdown helpers shared by every parser.
+
+The PHB is an Obsidian vault. It uses a consistent micro-format:
+  * `**Name**`                     a record's bold name (sometimes prefixed:
+                                   `Feat 1:`, `Rune 1:`, `Archetype:`, `Minor Condition:`)
+  * `*Field*: value| *Field2*: v`  pipe-separated attribute pairs (italic key)
+  * `` `text` ``                   backtick-wrapped RULES text (mechanical effect)
+  * `*"quote"*`                    italic flavor quote
+  * `*Label*` on its own line      a sub-section label (Limits, Counter-Action, ...)
+  * `****` / `************`         Obsidian horizontal-rule noise (dropped)
+"""
+from __future__ import annotations
+
+import re
+import unicodedata
+
+# ---- slugs -------------------------------------------------------------
+_slug_strip = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode()
+    text = _slug_strip.sub("-", text.lower()).strip("-")
+    return text or "x"
+
+
+# ---- filename / heading titles ----------------------------------------
+_file_prefix = re.compile(r"^[0-9a-zA-Z]{1,2}[_\-]")   # 'a_', 'b-', '1_', '10_'
+
+
+def title_from_filename(name: str) -> str:
+    """'b_Attacks, Damage, and Injuries.md' -> 'Attacks, Damage, and Injuries'."""
+    stem = re.sub(r"\.md$", "", name, flags=re.I)
+    stem = _file_prefix.sub("", stem)
+    return stem.strip().replace("_", " ")
+
+
+def order_from_filename(name: str) -> int | None:
+    """Leading 'a_'/'b_'... -> 1/2..., '1_'/'2_' -> that number, else None."""
+    m = re.match(r"^([0-9]+)[_\-]", name)
+    if m:
+        return int(m.group(1))
+    m = re.match(r"^([a-z])[_\-]", name, flags=re.I)
+    if m:
+        return ord(m.group(1).lower()) - ord("a") + 1
+    return None
+
+
+def clean_folder_label(folder: str) -> str:
+    return _file_prefix.sub("", folder).replace("_", " ").strip()
+
+
+# ---- inline extraction -------------------------------------------------
+BACKTICK = re.compile(r"`([^`]+)`")
+QUOTE = re.compile(r'^\*"(.+?)"\*\s*$')
+# one `*Key*: value` segment (value runs until a `|` pair-separator or line end)
+ATTR_SEG = re.compile(r"^\s*\*([A-Za-z][A-Za-z 0-9/_\-]*?)\*\s*:\s*(.*)$")
+BOLD_ONLY = re.compile(r"^\s*\*\*(.+?)\*\*\s*$")
+ITALIC_LABEL = re.compile(r"^\s*\*([A-Za-z][A-Za-z 0-9/_\-']*?)\*\s*$")
+HR_NOISE = re.compile(r"^\s*(\*{3,}|-{3,}|_{3,})\s*$")
+HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+
+
+def strip_md(s: str) -> str:
+    """Remove **bold**/*italic*/`code` markers for a plain-text value."""
+    s = BACKTICK.sub(r"\1", s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+    s = re.sub(r"\*(.+?)\*", r"\1", s)
+    s = re.sub(r"\[\[([^\]|]+)\|?([^\]]*)\]\]", lambda m: (m.group(2) or m.group(1)), s)  # wikilinks
+    return s.strip()
+
+
+def parse_attr_line(line: str) -> list[tuple[str, str]]:
+    """`*Tier*: 3| *Cost*: 10,000` -> [('Tier','3'), ('Cost','10,000')].
+
+    Splits on the pipe pair-separator, then matches each segment. Segments that
+    are not `*key*: value` shaped are ignored (handled elsewhere).
+    """
+    pairs: list[tuple[str, str]] = []
+    for seg in line.split("|"):
+        m = ATTR_SEG.match(seg)
+        if m:
+            key = m.group(1).strip()
+            val = strip_md(m.group(2)).strip().rstrip("|").strip()
+            pairs.append((key, val))
+    return pairs
+
+
+def looks_like_attr_line(line: str) -> bool:
+    return bool(ATTR_SEG.match(line.split("|")[0]))
+
+
+def first_paragraph(body: str) -> str:
+    """First non-empty, non-noise line block as a summary (plain text)."""
+    for block in re.split(r"\n\s*\n", body):
+        block = block.strip()
+        if not block or HR_NOISE.match(block) or HEADING.match(block):
+            continue
+        txt = strip_md(" ".join(l.strip() for l in block.splitlines()))
+        txt = txt.strip()
+        if len(txt) >= 15:
+            return txt[:400]
+    return ""
+
+
+def clean_body(raw: str) -> str:
+    """Light cleanup for the page body: drop Obsidian `****` HR noise, trim.
+
+    Kept intentionally conservative — we preserve the author's wording and
+    structure so prose pages render faithfully.
+    """
+    out = []
+    for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if HR_NOISE.match(line):
+            continue
+        out.append(line.rstrip())
+    text = "\n".join(out)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
