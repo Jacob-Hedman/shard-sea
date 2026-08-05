@@ -91,13 +91,19 @@ def looks_like_attr_line(line: str) -> bool:
 
 
 def first_paragraph(body: str) -> str:
-    """First non-empty, non-noise line block as a summary (plain text)."""
+    """First real prose paragraph as a summary (plain text, markdown stripped).
+
+    Skips leading heading / horizontal-rule lines even when a heading is glued to
+    the paragraph without a blank line, so summaries never leak `##` / `-` markers.
+    """
     for block in re.split(r"\n\s*\n", body):
-        block = block.strip()
-        if not block or HR_NOISE.match(block) or HEADING.match(block):
+        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        while lines and (HR_NOISE.match(lines[0]) or re.match(r"^#{1,6}\s", lines[0])):
+            lines.pop(0)
+        if not lines:
             continue
-        txt = strip_md(" ".join(l.strip() for l in block.splitlines()))
-        txt = txt.strip()
+        joined = " ".join(re.sub(r"^(#{1,6}|[-*+])\s+", "", l) for l in lines)
+        txt = strip_md(joined).strip()
         if len(txt) >= 15:
             return txt[:400]
     return ""

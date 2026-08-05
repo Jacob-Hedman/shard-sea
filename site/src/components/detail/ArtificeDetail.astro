@@ -7,7 +7,7 @@ const { rec } = Astro.props;
 const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
 const rows = [
   { label: 'Kind', value: rec.category },
-  { label: 'Pattern', value: rec.pattern },
+  { label: 'Fits', value: rec.attrs?.Equipment },
   { label: 'Bulk', value: rec.bulk },
   { label: 'Cost', value: rec.cost },
   { label: 'Activation', value: rec.activation },

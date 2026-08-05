@@ -293,6 +293,7 @@ exportKind('ritual', (rec) => {
 exportKind('pact', (rec) => {
   rec.invocation = rec.attrs.invocation || '';
   rec.lore = rec.attrs.lore || '';
+  rec.body_md = rec.attrs.body_md || '';
   return {
     facets: {},
     sub: 'Binding',
@@ -303,8 +304,9 @@ exportKind('pact', (rec) => {
 // CONSUMABLE
 exportKind('consumable', (rec) => {
   rec.cost = rec.attrs.Cost || '';
-  rec.traits = rec.attrs.Traits || '';
-  rec.effect = rec.effects || '';
+  rec.traits = rec.attrs.traits || rec.attrs.Traits || '';
+  rec.effect = rec.effects || '';           // real effect (from *Effects*:)
+  rec.extra = rec.attrs.extra || {};        // Overdose / Withdrawal / ...
   return {
     facets: { category: arr(rec.group) },
     sub: [rec.group, rec.cost ? `Cost ${rec.cost}` : ''].filter(Boolean).join(' · '),

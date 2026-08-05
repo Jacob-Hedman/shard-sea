@@ -128,7 +128,7 @@ def handle_items(rel_path, raw, role, page):
             applies = ("Weapon" if "weapon" in rel_path.lower()
                        else "Armor" if "armor" in rel_path.lower() else (r["section"] or "Equipment"))
             out.append(_entity(
-                "material", r["name"], group="Unique Materials", section=applies,
+                "material", r["name"], group=applies, section=applies,  # group -> stable slug (caeline-armor)
                 effects=eff,
                 attrs={"Multiplier": mult, "applies_to": applies,
                        "pricing_formula": MATERIAL_PRICING,
@@ -258,14 +258,26 @@ def handle_rituals(rel_path, raw, role, page):
 
 
 def handle_consumables(rel_path, raw, role, page):
+    """Consumable format: `**Name**` / `\\`Tier_.. Active_.. traits\\`` / `*Cost*:` /
+    description / `*Effects*:\\`...\\`` / `*Overdose*:` / `*Withdrawal*:`. The bare
+    top-level backtick is the TRAIT line; the real effect is the `*Effects*:` attr."""
     out = []
     for r in _records(raw, role, rel_path):
-        if not any(k in r["attrs"] for k in ("Cost", "Price", "Tier", "Traits", "Active")):
+        a = r["attrs"]
+        traits = r["effects"]  # the bare `Tier_.., Active_..` backtick line
+        effect = a.get("Effects") or ""
+        if not (a.get("Cost") or a.get("Price") or effect or traits):
             continue
+        tier = None
+        tm = re.search(r"Tier[_ ](\d+)", traits)
+        if tm:
+            tier = int(tm.group(1))
+        extra = {k: a[k] for k in ("Overdose", "Withdrawal", "Addiction") if a.get(k)}
         out.append(_entity(
-            "consumable", r["name"], group=r["group"] or r["section"],
-            tier=_int(r["attrs"].get("Tier")), summary=r["description"] or r["flavor"],
-            effects=r["effects"], attrs=r["attrs"], raw=r["raw"], source=rel_path,
+            "consumable", r["name"], group=r["group"] or r["section"], tier=tier,
+            summary=r["description"], effects=effect,
+            attrs={**a, "traits": traits, "extra": extra},
+            raw=r["raw"], source=rel_path,
         ))
     return out
 
@@ -357,11 +369,14 @@ def _extract_pacts(raw, source, restrict_after=None):
         text = "\n".join(lines[i + 1:end])
         fl = re.search(r'\*"(.+?)"\*', text, re.S)
         flavor = fl.group(1).strip() if fl else ""
+        # keep the FULL body (minus the invocation quote, shown separately) as
+        # markdown, so the terms/benefit prose between the backticks isn't lost.
+        body_md = T.clean_body(re.sub(r'\*"[^"]+"\*\s*', '', text, flags=re.S))
+        lore = T.first_paragraph(body_md)
         effects = "\n".join(t.strip() for t in T.BACKTICK.findall(text))
-        lore = T.first_paragraph(T.clean_body(re.sub(r'\*".+?"\*', '', text, flags=re.S)))
         out.append(_entity(
             "pact", name, group="Pact", summary=flavor or lore, effects=effects,
-            attrs={"invocation": flavor, "lore": lore},
+            attrs={"invocation": flavor, "lore": lore, "body_md": body_md},
             raw="\n".join(lines[i:end]).strip(), source=source,
         ))
     return out

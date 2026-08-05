@@ -1,9 +1,9 @@
 ---
-import Prose from '../Prose.astro';
+import { renderMarkdown } from '../../lib/md';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const html = renderMarkdown(rec.body_md || rec.effects);
 ---
 
 <div class="max-w-3xl space-y-5">
@@ -15,11 +15,5 @@ const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-
       “{rec.invocation}”
     </blockquote>
   )}
-  {rec.lore && <p class="text-[15px] leading-relaxed text-muted">{rec.lore}</p>}
-  {rec.effects && (
-    <section>
-      <h2 class={LABEL}>The Pact</h2>
-      <Prose text={rec.effects} />
-    </section>
-  )}
+  {html && <div class="page-prose" set:html={html} />}
 </div>

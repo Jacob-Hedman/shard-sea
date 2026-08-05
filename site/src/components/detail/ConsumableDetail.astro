@@ -8,10 +8,10 @@ const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-
 const rows = [
   { label: 'Kind', value: rec.group },
   { label: 'Cost', value: rec.cost },
-  { label: 'Tier', value: rec.tier != null ? String(rec.tier) : '' },
-  { label: 'Traits', value: rec.traits },
 ];
+// The trait line ("Tier_1, Active_1 Hour/1 Day, Deadly_2 Edible") -> chips.
 const traits = String(rec.traits || '').split(/,\s*/).map((s: string) => s.trim()).filter(Boolean);
+const extra: Record<string, string> = rec.extra ?? {};
 ---
 
 <div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
@@ -29,14 +29,18 @@ const traits = String(rec.traits || '').split(/,\s*/).map((s: string) => s.trim(
     )}
   </aside>
   <div class="min-w-0 space-y-5 lg:order-1">
-    {rec.summary && rec.summary !== rec.effects && (
-      <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>
-    )}
+    {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
     {rec.effect && (
       <section>
         <h2 class={LABEL}>Effect</h2>
         <Prose text={rec.effect} />
       </section>
     )}
+    {Object.entries(extra).map(([k, v]) => (
+      <section>
+        <h2 class={LABEL}>{k}</h2>
+        <Prose text={v} />
+      </section>
+    ))}
   </div>
 </div>
