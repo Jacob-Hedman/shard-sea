@@ -13,7 +13,7 @@ const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-
 const attrs = rec.attrs ?? {};
 const SKIP = new Set([
   'description', 'panic_flavor', 'Record', 'record_type', 'injuries',
-  'spoke', 'unlocks_at', 'notes',
+  'spoke', 'unlocks_at', 'notes', 'examples',
 ]);
 // The stat rail is narrow and monospaced: only short, scalar-ish values belong
 // there. Anything sentence-like renders as its own section instead.
@@ -38,8 +38,12 @@ const longBlocks = Object.entries(attrs).filter(
   ([k, v]) => !SKIP.has(k) && typeof v === 'string' && v.length > SHORT,
 ) as [string, string][];
 
-const flavor = rec.summary || attrs.description || '';
-const body = rec.effects || rec.description || attrs.description || rec.text || '';
+// A lead paragraph (the descriptive text), then an "Effect" section only when
+// the mechanics text actually differs from it — so descriptive-only kinds
+// (resources, weapon traits) aren't mislabelled "Effect" or shown twice.
+const lead = rec.summary || attrs.description || rec.text || '';
+const effectText = rec.effects && String(rec.effects).trim() && rec.effects !== lead
+  ? rec.effects : '';
 ---
 
 <div class:list={[rows.length > 0 && 'lg:grid lg:grid-cols-[1fr_16rem] lg:gap-8']}>
@@ -54,11 +58,11 @@ const body = rec.effects || rec.description || attrs.description || rec.text || 
     </aside>
   )}
   <div class="min-w-0 space-y-5 lg:order-1">
-    {flavor && flavor !== body && <p class="border-l-2 border-gold/40 pl-3 text-[15px] italic text-muted">“{flavor}”</p>}
-    {body && (
+    {lead && <p class="text-[15px] leading-relaxed text-muted">{lead}</p>}
+    {effectText && (
       <section>
         <h2 class={LABEL}>Effect</h2>
-        <Prose text={body} />
+        <Prose text={effectText} />
       </section>
     )}
     {longBlocks.map(([k, v]) => (

@@ -50,7 +50,7 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 | `discipline` | 30 | activity (4), discipline (30), feat (200), pact (6), rune (36) |
 | `fixations` | 1 | fixation (5) |
 | `pacts` | 1 | pact (2) |
-| `page` | 16 | activity (3), structure (10), threshold_feat (9) |
+| `page` | 16 | activity (3), structure (9), threshold_feat (9) |
 | `residue` | 1 | residue (11) |
 | `resources` | 1 | resource (12) |
 | `rituals` | 1 | ritual (5) |
@@ -83,7 +83,7 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 - **rune**: 36
 - **ship**: 30
 - **skill**: 10
-- **structure**: 20
+- **structure**: 19
 - **threshold_feat**: 9
 - **weapon**: 48
 - **weapon_group**: 8

@@ -23,6 +23,26 @@ def _int(val: str | None) -> int | None:
     return int(m.group()) if m else None
 
 
+def _clean_lead(text: str | None) -> str:
+    """First real sentence of a block for use as a card summary — skips bullet
+    markers, headings, and label-only lines like 'One Watch:'."""
+    for line in (text or "").split("\n"):
+        s = re.sub(r"^\s*[-*]\s*", "", line)
+        s = re.sub(r"^#{1,6}\s*", "", s).strip()
+        if len(s) >= 8 and not re.fullmatch(r"[A-Za-z][A-Za-z ]{0,30}:?", s):
+            return s
+    return ""
+
+
+def _lead_from(*sources: str | None) -> str:
+    """First usable lead text across several candidate blocks."""
+    for src in sources:
+        got = _clean_lead(src)
+        if got:
+            return got
+    return ""
+
+
 def _entity(kind, name, *, group="", section="", tier=None, summary="", effects="",
             attrs=None, raw="", source="", typed=None):
     return {
@@ -232,10 +252,12 @@ def handle_actions(rel_path, raw, role, page):
         ap = (r["extra"].get("ap") or r["attrs"].get("AP") or "").strip() or None
         grp = r["group"] or r["section"]
         action_type = re.sub(r"\s+Actions?\s*$", "", grp, flags=re.I).strip() or None
-        effect = r["effects"] or r["description"] or None
         extra = {k: v for k, v in r["sublabels"].items()}
+        # some actions (e.g. Struggle) put all their rules in sub-labels
+        effect = r["effects"] or r["description"] or (next(iter(extra.values()), None)) or None
+        summary = _lead_from(r["effects"], r["description"], *extra.values())
         out.append(_entity(
-            "action", r["name"], group=action_type, section=r["section"], summary=effect,
+            "action", r["name"], group=action_type, section=r["section"], summary=summary,
             effects=r["effects"], attrs=r["attrs"] | ({"AP": ap} if ap else {}),
             raw=r["raw"], source=rel_path,
             typed=("game_action", {
@@ -423,7 +445,10 @@ def make_catalog_handler(role: str):
             if prefix:
                 attrs["record_type"] = prefix
 
-            summary = r["flavor"] or (r["description"].split("\n")[0] if r["description"] else "")
+            # summary: flavor > a real lead sentence from description/effects >
+            # the first sub-label's text (so sub-label-only records aren't blank).
+            summary = r["flavor"] or _lead_from(r["description"], r["effects"],
+                                                *r["sublabels"].values())
 
             # A damage type carries its own Injury Risk table as structured rows
             # ('- *8-12*: Minor| *Superficial Cut*: text `effect`'). Kept ON the

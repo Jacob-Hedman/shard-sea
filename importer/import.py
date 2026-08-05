@@ -87,6 +87,34 @@ def main() -> int:
         print(f"  custom items merged: {sum(len(pg['records']) for pg in pages if pg['role'] == 'custom')}")
 
     # ---- report ----
+    # Global dedup: the book lists some buildings/units in several chapters (a
+    # Wyvern Roost in both Cities and Building an Outpost). The catalog sweep
+    # imports each — keep only the fullest copy per (kind, name). Restricted to
+    # the kinds where a repeated name genuinely IS the same entry; feats,
+    # materials, runes, activities legitimately reuse names across contexts.
+    DEDUP_KINDS = {"structure", "city_zone", "battle_card", "ship"}
+    best: dict[tuple, tuple] = {}
+    for pi, p in enumerate(pages):
+        for ri, e in enumerate(p["records"]):
+            if e["kind"] not in DEDUP_KINDS or e.get("attrs", {}).get("custom"):
+                continue
+            key = (e["kind"], e["name"].strip().lower())
+            weight = len(e.get("raw_md", "")) + 40 * len(e.get("attrs", {}))
+            if key not in best or weight > best[key][0]:
+                best[key] = (weight, pi, ri)
+    keep = {(v[1], v[2]) for v in best.values()}
+    n_dropped = 0
+    for pi, p in enumerate(pages):
+        kept = []
+        for ri, e in enumerate(p["records"]):
+            if e["kind"] not in DEDUP_KINDS or e.get("attrs", {}).get("custom") or (pi, ri) in keep:
+                kept.append(e)
+            else:
+                n_dropped += 1
+        p["records"] = kept
+    if n_dropped:
+        print(f"  deduped {n_dropped} cross-chapter duplicate record(s)")
+
     kinds = Counter()
     roles = Counter()
     errors = []
