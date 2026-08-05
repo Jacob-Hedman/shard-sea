@@ -65,6 +65,16 @@ export function renderMarkdown(md?: string | null): string {
     }
 
     flushList();
+
+    // A line that is only a **bold** or *italic* label (a sub-section marker in
+    // this rulebook) becomes a small heading, so nested rules stay scannable.
+    // The italic form is guarded (Title-case, no colon) so `*key*: value` and
+    // `*"quotes"*` are left as inline text.
+    const boldLabel = /^\s*\*\*([^*]+?)\*\*:?\s*$/.exec(line);
+    const italicLabel = /^\s*\*([A-Z][^*:"]{1,45})\*\s*$/.exec(line);
+    const label = boldLabel || italicLabel;
+    if (label) { flushPara(); out.push(`<h4>${inline(label[1])}</h4>`); continue; }
+
     para.push(line);
   }
   flushPara(); flushList(); flushQuote();
