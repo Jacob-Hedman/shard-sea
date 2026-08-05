@@ -1,0 +1,69 @@
+---
+import Prose from '../Prose.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const injuries: any[] = rec.injuries ?? [];
+const sevTone: Record<string, string> = {
+  '-': 'text-faint',
+  Minor: 'text-muted',
+  Moderate: 'text-gold',
+  Major: 'text-nonogl',
+  Lethal: 'text-nonogl',
+};
+---
+
+<div class="max-w-4xl space-y-6">
+  <div class="flex flex-wrap items-center gap-2 text-xs">
+    {rec.group && (
+      <span class="rounded-md border border-line bg-surface px-2 py-0.5 font-medium text-faint">{rec.group}</span>
+    )}
+    {rec['Base Damage'] && (
+      <span class="rounded-md border border-gold/40 bg-gold/10 px-2 py-0.5 font-mono font-medium text-gold">
+        Base Damage {rec['Base Damage']}
+      </span>
+    )}
+  </div>
+
+  {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
+
+  {rec.effects && (
+    <section>
+      <h2 class={LABEL}>Rule</h2>
+      <Prose text={rec.effects} />
+    </section>
+  )}
+
+  {injuries.length > 0 && (
+    <section>
+      <h2 class={LABEL}>Injury Risk table</h2>
+      <p class="mb-2 text-xs text-faint">Roll 2d6 when this damage causes an Injury.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-line text-left">
+              <th class="py-1.5 pr-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-faint">Roll</th>
+              <th class="py-1.5 pr-3 text-[11px] font-semibold uppercase tracking-wide text-faint">Severity</th>
+              <th class="py-1.5 pr-3 text-[11px] font-semibold uppercase tracking-wide text-faint">Injury</th>
+              <th class="py-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            {injuries.map((i) => (
+              <tr class="border-b border-line/60 align-top">
+                <td class="whitespace-nowrap py-2 pr-3 font-mono text-xs text-ink">{i.roll}</td>
+                <td class={`whitespace-nowrap py-2 pr-3 text-xs font-medium ${sevTone[i.severity] ?? 'text-muted'}`}>{i.severity}</td>
+                <td class="py-2 pr-3 font-medium text-ink">{i.name}</td>
+                <td class="py-2 text-muted">
+                  {i.text && <span class="block text-[13px] italic text-faint">{i.text}</span>}
+                  {i.effect && <span class="mt-0.5 block">{i.effect}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</div>

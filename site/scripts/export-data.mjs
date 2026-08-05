@@ -361,6 +361,50 @@ exportKind('action', (rec, e) => {
   };
 });
 
+// ---- catalogs added in the v17 coverage pass --------------------------
+// These share the generic entity shape; each just needs its promoted fields,
+// browse facets and card subtitle.
+const SIMPLE_KINDS = [
+  { kind: 'skill', facets: (r) => ({ principal: r.attrs.principal ? ['Principal'] : ['Standard'] }),
+    sub: (r) => (r.attrs.principal ? `Principal Skill${r.attrs.attack ? ` · ${r.attrs.attack}` : ''}` : 'Skill'),
+    promote: ['description', 'principal', 'attack'] },
+  { kind: 'activity', facets: (r) => ({ skill: r.group ? [r.group] : [], access: r.attrs.access ? [r.attrs.access] : [] }),
+    sub: (r) => [r.attrs.access, r.group].filter(Boolean).join(' · '), promote: [] },
+  { kind: 'background', facets: () => ({}),
+    sub: (r) => [r.attrs['Starting Wealth'] && `Wealth ${r.attrs['Starting Wealth']}`, r.attrs['Contact Points'] && `${r.attrs['Contact Points']} contacts`].filter(Boolean).join(' · '),
+    promote: ['description'] },
+  { kind: 'threshold_feat', facets: (r) => ({ ability: r.group ? [r.group] : [] }),
+    sub: (r) => [r.group, r.attrs.record_type].filter(Boolean).join(' · '), promote: [] },
+  { kind: 'damage_type', facets: (r) => ({ category: r.group ? [r.group] : [] }),
+    sub: (r) => [r.group, r.attrs['Base Damage'] && `Base ${r.attrs['Base Damage']}`].filter(Boolean).join(' · '),
+    promote: ['injuries', 'Base Damage'] },
+  { kind: 'fixation', facets: () => ({}),
+    sub: (r) => [r.attrs.Feat && `Feat: ${r.attrs.Feat}`, r.attrs['Panic Response']].filter(Boolean).join(' · '), promote: [] },
+  { kind: 'ship', facets: (r) => ({ category: r.group ? [r.group] : [], tier: r.tier != null ? [`Tier ${r.tier}`] : [] }),
+    sub: (r) => [r.group, r.tier != null ? `Tier ${r.tier}` : ''].filter(Boolean).join(' · '), promote: [] },
+  { kind: 'structure', facets: (r) => ({ category: r.group ? [r.group] : [] }),
+    sub: (r) => [r.group, r.attrs.Cost && `Cost ${r.attrs.Cost}`].filter(Boolean).join(' · '), promote: [] },
+  { kind: 'city_zone', facets: (r) => ({ spoke: r.group ? [r.group] : [], region: r.attrs.region ? [r.attrs.region] : [] }),
+    sub: (r) => [r.attrs.class, r.attrs.unlocks_at !== '' ? `unlocks at ${r.attrs.unlocks_at}` : ''].filter(Boolean).join(' · '),
+    promote: ['class', 'region', 'spoke', 'unlocks_at'] },
+  { kind: 'battle_card', facets: (r) => ({ category: r.group ? [r.group] : [] }),
+    sub: (r) => [r.group, r.tier != null ? `Tier ${r.tier}` : ''].filter(Boolean).join(' · '), promote: [] },
+  { kind: 'residue', facets: (r) => ({ category: r.group ? [r.group] : [] }),
+    sub: (r) => [r.group, r.attrs.Value && `Value: ${r.attrs.Value}`].filter(Boolean).join(' · '), promote: ['aspect'] },
+  { kind: 'resource', facets: (r) => ({ category: r.group ? [r.group] : [] }),
+    sub: (r) => [r.group, (r.attrs.Value || r.attrs['Value per Bulk']) && `Value ${r.attrs.Value || r.attrs['Value per Bulk']}`].filter(Boolean).join(' · '),
+    promote: [] },
+  { kind: 'weapon_trait', facets: () => ({}), sub: () => 'Weapon trait', promote: ['notes'] },
+  { kind: 'weapon_group', facets: () => ({}), sub: () => 'Weapon group', promote: ['description'] },
+];
+
+for (const cfg of SIMPLE_KINDS) {
+  exportKind(cfg.kind, (rec) => {
+    for (const k of cfg.promote) if (rec.attrs[k] !== undefined) rec[k] = rec.attrs[k];
+    return { facets: cfg.facets(rec), sub: cfg.sub(rec), desc: rec.summary || rec.effects };
+  });
+}
+
 // PAGE (prose chapters + lore) — from the page table, not entity. Each carries
 // a `section` (see pageSection) so the site's prose sections can filter them.
 {

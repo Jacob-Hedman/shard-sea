@@ -113,7 +113,8 @@ def parse_block(block: Block, header_line: str) -> dict:
     sublabels: dict[str, list[str]] = {}
     cur_label: str | None = None
 
-    for line in block.lines:
+    for raw_line in block.lines:
+        line = T.close_backticks(raw_line)   # tolerate unterminated-backtick typos
         s = line.strip()
         if not s or T.HR_NOISE.match(s):
             continue
@@ -140,6 +141,23 @@ def parse_block(block: Block, header_line: str) -> dict:
         # content line: split backtick rules text from plain prose
         ticks = [t.strip() for t in T.BACKTICK.findall(line)]
         plain = T.strip_md(T.BACKTICK.sub(" ", line)).strip()
+
+        # Ships / structures / battle units put their STATS inside backticks as
+        # `Tier: 1| Durability: 3`. Those are attributes, not rules text.
+        if ticks and not plain and cur_label is None:
+            stat_pairs: list[tuple[str, str]] = []
+            all_stats = True
+            for t in ticks:
+                p = T.parse_plain_pairs(t)
+                if p:
+                    stat_pairs.extend(p)
+                else:
+                    all_stats = False
+            if all_stats and stat_pairs:
+                for k, v in stat_pairs:
+                    attrs.setdefault(k, v)
+                continue
+
         bucket_text: list[str] = []
         if ticks:
             bucket_text.extend(ticks)

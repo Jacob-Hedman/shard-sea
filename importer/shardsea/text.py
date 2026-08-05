@@ -86,8 +86,43 @@ def parse_attr_line(line: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def close_backticks(line: str) -> str:
+    """Repair an unterminated backtick (a recurring typo in this hand-authored
+    vault — 11 such lines in v17). Without this the opening tick leaks into the
+    rendered text and the rules text is lost. An odd count means the last tick
+    was meant to close at end-of-line."""
+    if line.count("`") % 2 == 1:
+        return line.rstrip() + "`"
+    return line
+
+
 def looks_like_attr_line(line: str) -> bool:
     return bool(ATTR_SEG.match(line.split("|")[0]))
+
+
+# `Tier: 1| Durability: 3` — the stat form used inside backticks by ships,
+# structures, battle units... (plain `Key: value` pairs, no italic markers).
+PLAIN_PAIR = re.compile(r"^\s*([A-Za-z][A-Za-z 0-9/_\-]*?)\s*:\s*(.+?)\s*$")
+
+
+def parse_plain_pairs(text: str) -> list[tuple[str, str]]:
+    """Parse `Key: val| Key2: val2`. Returns [] unless EVERY non-empty segment
+    is a Key: value pair, so prose sentences containing a colon aren't eaten."""
+    segs = [s for s in str(text).split("|") if s.strip()]
+    if not segs:
+        return []
+    pairs = []
+    for seg in segs:
+        m = PLAIN_PAIR.match(seg)
+        if not m:
+            return []
+        key = m.group(1).strip()
+        val = strip_md(m.group(2)).strip()
+        # a real stat key is short and not a sentence
+        if len(key) > 24 or " " in key.strip() and len(key.split()) > 3:
+            return []
+        pairs.append((key, val))
+    return pairs
 
 
 def first_paragraph(body: str) -> str:

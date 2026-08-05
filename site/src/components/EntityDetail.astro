@@ -13,6 +13,8 @@ import ArtificeDetail from './detail/ArtificeDetail.astro';
 import RitualDetail from './detail/RitualDetail.astro';
 import PactDetail from './detail/PactDetail.astro';
 import ConsumableDetail from './detail/ConsumableDetail.astro';
+import DamageTypeDetail from './detail/DamageTypeDetail.astro';
+import SkillDetail from './detail/SkillDetail.astro';
 import GenericDetail from './detail/GenericDetail.astro';
 
 interface Props {
@@ -34,6 +36,8 @@ const map: Record<string, any> = {
   ritual: RitualDetail,
   pact: PactDetail,
   consumable: ConsumableDetail,
+  damage_type: DamageTypeDetail,
+  skill: SkillDetail,
 };
 const Body = map[rec.kind] ?? GenericDetail;
 // "In: <chapter page>" context link — but not on the page itself.

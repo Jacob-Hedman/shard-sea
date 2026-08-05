@@ -11,15 +11,32 @@ const { rec } = Astro.props;
 const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
 
 const attrs = rec.attrs ?? {};
-const SKIP = new Set(['description', 'panic_flavor', 'Record']);
+const SKIP = new Set([
+  'description', 'panic_flavor', 'Record', 'record_type', 'injuries',
+  'spoke', 'unlocks_at', 'notes',
+]);
+// The stat rail is narrow and monospaced: only short, scalar-ish values belong
+// there. Anything sentence-like renders as its own section instead.
+const SHORT = 30;
 const rows = [
   rec.rune_class && { label: 'Class', value: rec.rune_class },
   rec.multiplier && { label: 'Multiplier', value: rec.multiplier },
   rec.applies_to && { label: 'Applies to', value: rec.applies_to },
+  // the governing Skill / access for Activities and similar grouped kinds
+  rec.kind === 'activity' && rec.group && { label: 'Skill', value: rec.group },
   ...Object.entries(attrs)
-    .filter(([k, v]) => !SKIP.has(k) && !['Class', 'Multipier', 'Multiplier', 'applies_to'].includes(k) && v && String(v).length < 60)
+    .filter(([k, v]) =>
+      !SKIP.has(k) &&
+      !['Class', 'Multipier', 'Multiplier', 'applies_to'].includes(k) &&
+      v && typeof v !== 'object' && String(v).length <= SHORT)
     .map(([k, v]) => ({ label: k.replace(/_/g, ' '), value: v as any })),
 ].filter(Boolean) as { label: string; value: any }[];
+
+// Long sub-label blocks (Time, Procedure, Limits, Collaboration…) read as
+// sections, not as cramped stat rows — this is what Activities are made of.
+const longBlocks = Object.entries(attrs).filter(
+  ([k, v]) => !SKIP.has(k) && typeof v === 'string' && v.length > SHORT,
+) as [string, string][];
 
 const flavor = rec.summary || attrs.description || '';
 const body = rec.effects || rec.description || attrs.description || rec.text || '';
@@ -44,5 +61,11 @@ const body = rec.effects || rec.description || attrs.description || rec.text || 
         <Prose text={body} />
       </section>
     )}
+    {longBlocks.map(([k, v]) => (
+      <section>
+        <h2 class={LABEL}>{k.replace(/_/g, ' ')}</h2>
+        <Prose text={v} />
+      </section>
+    ))}
   </div>
 </div>

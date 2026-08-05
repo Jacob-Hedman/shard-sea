@@ -58,6 +58,15 @@ const facets = allFacets(section);
           <span class="font-mono text-xs text-faint">{count.toLocaleString()} total</span>
         </div>
         <p class="mt-1 text-sm text-muted">{section.blurb}</p>
+        {section.rulesPage && (
+          <a
+            href={`/pages/${section.rulesPage.slug}`}
+            class="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-muted transition hover:border-gold/40 hover:text-gold"
+          >
+            <i class="ti ti-book-2 text-sm" aria-hidden="true"></i>{section.rulesPage.label}
+            <i class="ti ti-arrow-right text-xs" aria-hidden="true"></i>
+          </a>
+        )}
       </header>
 
       <div

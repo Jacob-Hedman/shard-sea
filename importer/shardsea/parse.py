@@ -10,7 +10,7 @@ import re
 
 from . import text as T
 from .blocks import parse_block, split_blocks
-from .registry import ROLE_PATTERNS, role_for
+from .registry import CATALOG_SPECS, ROLE_PATTERNS, role_for
 
 ITEM_KEYS = ("Tier", "Cost", "Price", "Bulk", "Durability", "Durable")
 MATERIAL_PRICING = "Price + Bulk × (Material Value Multiplier)"
@@ -170,6 +170,8 @@ def handle_items(rel_path, raw, role, page):
                     "special": special,
                 }),
             ))
+    if role == "weapons":
+        out.extend(extract_weapon_meta(rel_path, raw))
     return out
 
 
@@ -386,6 +388,318 @@ def handle_pacts(rel_path, raw, role, page):
     return _extract_pacts(raw, rel_path)
 
 
+# ---- generic prefixed-catalog handler (driven by registry.CATALOG_SPECS) ----
+PREFIX_RE = re.compile(r"^([A-Za-z][A-Za-z' -]{1,24})\s*:\s*\*\*")
+
+
+def make_catalog_handler(role: str):
+    """Build a handler for a CATALOG_SPECS entry — see registry.CATALOG_SPECS."""
+    spec = CATALOG_SPECS[role]
+    kind = spec["kind"]
+    group_from = spec["group_from"]
+
+    def handler(rel_path, raw, role_, page):
+        out = []
+        for r in _records(raw, role, rel_path):
+            prefix = ""
+            m = PREFIX_RE.match(r["raw"].lstrip())
+            if m:
+                prefix = m.group(1).strip()
+
+            if group_from == "prefix":
+                group = prefix or kind.replace("_", " ").title()
+            elif group_from == "group":
+                group = r["group"] or r["section"]
+            elif group_from == "section":
+                group = r["section"] or r["group"]
+            else:
+                group = group_from  # a literal label
+
+            attrs = dict(r["attrs"])
+            attrs.update(r["sublabels"])
+            if spec.get("access_from_prefix") and prefix:
+                # 'General Activity' / 'Exclusive Activity' -> who may use it
+                attrs["access"] = prefix.split()[0].title() if " " in prefix else "General"
+            if prefix:
+                attrs["record_type"] = prefix
+
+            summary = r["flavor"] or (r["description"].split("\n")[0] if r["description"] else "")
+
+            # A damage type carries its own Injury Risk table as structured rows
+            # ('- *8-12*: Minor| *Superficial Cut*: text `effect`'). Kept ON the
+            # damage type rather than as 42 stub records — you look an injury up
+            # by the damage that caused it.
+            if kind == "damage_type":
+                injuries = []
+                for im in re.finditer(
+                        r"^-\s*\*(?P<range>[^*]+)\*\s*:\s*(?P<sev>[^|]*?)\s*\|\s*\*(?P<iname>[^*]+)\*\s*:\s*(?P<body>.+?)\s*$",
+                        r["raw"], re.M):
+                    body = im.group("body")
+                    injuries.append({
+                        "roll": im.group("range").strip(),
+                        "severity": T.strip_md(im.group("sev")).strip(" |") or "-",
+                        "name": im.group("iname").strip(),
+                        "text": T.strip_md(T.BACKTICK.sub(" ", body)).strip(),
+                        "effect": "\n".join(t.strip() for t in T.BACKTICK.findall(body)),
+                    })
+                if injuries:
+                    attrs["injuries"] = injuries
+                    # the general rule is the backtick text OUTSIDE the injury
+                    # rows — otherwise every row's effect repeats above the table
+                    inj_effects = {i["effect"] for i in injuries if i["effect"]}
+                    kept = [ln for ln in (r["effects"] or "").split("\n")
+                            if ln.strip() and ln.strip() not in inj_effects]
+                    r["effects"] = "\n".join(kept)
+
+            out.append(_entity(
+                kind, r["name"], group=group, section=r["section"],
+                tier=_int(attrs.get("Tier")), summary=summary,
+                effects=r["effects"] or r["description"],
+                attrs=attrs | ({"description": r["description"]} if r["description"] else {}),
+                raw=r["raw"], source=rel_path,
+            ))
+        return out
+
+    return handler
+
+
+# ---- weapon traits glossary + weapon group effects ---------------------
+TRAIT_BULLET = re.compile(r"^-\s*\*\*(?P<name>[^*]+?)\*\*\s*:\s*(?P<desc>.+?)\s*$")
+
+
+def extract_weapon_meta(rel_path, raw):
+    """The Weaponry Traits glossary and each Weapon Group's Group Effects.
+    Every weapon's `Traits` field references these, so they need to be lookups."""
+    out = []
+    # --- traits: '- **Vicious_x**: ...' bullets under '#### Weaponry Traits'
+    sec = re.search(r"^#+\s*Weaponry Traits\s*$(?P<body>.*?)(?=^#{1,2}\s|\Z)", raw, re.M | re.S)
+    if sec:
+        lines = sec.group("body").split("\n")
+        for i, line in enumerate(lines):
+            m = TRAIT_BULLET.match(line)
+            if not m:
+                continue
+            name = m.group("name").strip()
+            desc = T.strip_md(m.group("desc")).strip()
+            notes = []
+            for nxt in lines[i + 1:]:
+                if TRAIT_BULLET.match(nxt) or not nxt.strip():
+                    break
+                if re.match(r"^\s+[-*]", nxt):        # indented sub-note
+                    notes.append(T.strip_md(nxt).strip().lstrip("-* "))
+                else:
+                    break
+            out.append(_entity(
+                "weapon_trait", name, group="Weapon Traits", summary=desc,
+                effects=desc, attrs={"notes": "\n".join(notes)} if notes else {},
+                raw=line.strip(), source=rel_path,
+            ))
+    # --- group effects: '#### Knives' ... '**Group Effects**: `...`'
+    for m in re.finditer(
+            r"^#+\s*(?P<name>[A-Za-z][A-Za-z '\-]{1,30})\s*$(?P<body>.*?)(?=^#|\Z)",
+            raw, re.M | re.S):
+        body = m.group("body")
+        ge = re.search(r"\*\*Group Effects\*\*\s*:\s*(?P<eff>.+?)$", body, re.M)
+        if not ge:
+            continue
+        name = m.group("name").strip()
+        if name.lower().startswith("weaponry"):
+            continue
+        effect = "\n".join(t.strip() for t in T.BACKTICK.findall(ge.group("eff"))) \
+            or T.strip_md(ge.group("eff")).strip()
+        desc = T.first_paragraph(T.clean_body(body.split("**Group Effects**")[0]))
+        out.append(_entity(
+            "weapon_group", name, group="Weapon Groups", summary=desc, effects=effect,
+            attrs={"description": desc}, raw=ge.group(0).strip(), source=rel_path,
+        ))
+    return out
+
+
+# ---- Backgrounds -------------------------------------------------------
+def handle_backgrounds(rel_path, raw, role, page):
+    out = []
+    sec = re.search(r"^#+\s*Backgrounds\s*$(?P<body>.*?)(?=^##\s|\Z)", raw, re.M | re.S)
+    if not sec:
+        return out
+    for r in _records(sec.group("body"), "skills", rel_path):   # bold-name records
+        if not any(k in r["attrs"] for k in ("Starting Wealth", "Contact Points")):
+            continue
+        desc = r["description"].strip()
+        out.append(_entity(
+            "background", r["name"], group="Background", summary=desc,
+            effects=r["effects"], attrs=r["attrs"] | {"description": desc},
+            raw=r["raw"], source=rel_path,
+        ))
+    return out
+
+
+# ---- City zones (italic names with a threshold tier) -------------------
+# 'Interior Structure 0: *Longhouse*', 'Corpus Zone 2: *Market*', 'Unit 3: *Levy*'
+CITY_ZONE = re.compile(
+    r"^(?:(?P<region>Interior|Corpus|Boundary|Exterior|Unique)\s+)?"
+    r"(?P<cls>Structure|Zone|Unit)\s*(?P<tier>\d+)?\s*:\s*\*+(?P<name>[^*]+?)\*+\s*$")
+
+
+def handle_cities(rel_path, raw, role, page):
+    """a_Cities.md lists each Spoke's zones as `Interior Structure 0: *Longhouse*`
+    (italic name + unlock threshold), unlike the bold outpost cards."""
+    lines = raw.replace("\r\n", "\n").split("\n")
+    spoke = ""
+    starts = []
+    for i, line in enumerate(lines):
+        h = T.HEADING.match(line)
+        if h:
+            spoke = re.sub(r"^#+\s*", "", h.group(2)).strip()
+            continue
+        m = CITY_ZONE.match(line.strip())
+        if m:
+            starts.append((i, m, spoke))
+    out = []
+    for idx, (i, m, spoke) in enumerate(starts):
+        end = starts[idx + 1][0] if idx + 1 < len(starts) else len(lines)
+        block = []
+        for k in range(i + 1, end):
+            if T.HEADING.match(lines[k]):
+                break
+            block.append(lines[k])
+        attrs, effects, desc = {}, [], []
+        for bl in block:
+            bl = T.close_backticks(bl)
+            s = bl.strip()
+            if not s or T.HR_NOISE.match(s):
+                continue
+            ticks = [t.strip() for t in T.BACKTICK.findall(bl)]
+            plain = T.strip_md(T.BACKTICK.sub(" ", bl)).strip()
+            if ticks and not plain:
+                for t in ticks:
+                    pairs = T.parse_plain_pairs(t.replace("/", "| "))
+                    if pairs:
+                        attrs.update(dict(pairs))
+                    else:
+                        effects.append(t)
+                continue
+            if plain:
+                desc.append(plain)
+            effects.extend(ticks)
+        tier = m.group("tier")
+        region = (m.group("region") or "").strip()
+        cls = m.group("cls").strip()
+        # a city's raisable troops are battle cards, not places
+        kind = "battle_card" if cls == "Unit" else "city_zone"
+        out.append(_entity(
+            kind, m.group("name").strip(),
+            group=("Unit" if kind == "battle_card" else (spoke or "City")),
+            tier=_int(tier), summary=" ".join(desc)[:400],
+            effects="\n".join(effects),
+            attrs=attrs | {"class": (f"{region} {cls}".strip()), "region": region,
+                           "spoke": spoke, "unlocks_at": tier or "",
+                           "description": " ".join(desc)},
+            raw="\n".join(lines[i:end]).strip(), source=rel_path,
+        ))
+    return out
+
+
+# ---- the 10 core Skills (the spine every discipline/feat/activity references) --
+def handle_skills(rel_path, raw, role, page):
+    """Skills live under the '### Skills in Specific' heading as `**Name**` +
+    a description paragraph + optional `- *X is a Principal Skill...*` bullet."""
+    marker = re.search(r"^#{2,}\s*Skills in Specific\s*$", raw, re.M)
+    if not marker:
+        return []
+    body = raw[marker.end():]
+    out = []
+    for r in _records(body, role, rel_path):
+        desc = r["description"].strip()
+        if len(desc) < 30:      # skip stray bold labels, keep real skill entries
+            continue
+        # the '- X is a Principal Skill used to…' bullet renders as its own
+        # callout, so drop it from the prose description
+        desc = re.sub(r"\s*-?\s*\b\w+ is a Principal Skill[^.]*\.\s*$", "", desc).strip()
+        principal = bool(re.search(r"Principal Skill", r["raw"], re.I))
+        attack = ""
+        am = re.search(r"(Melee|Ranged) Attacks", r["raw"], re.I)
+        if am:
+            attack = am.group(1).title()
+        out.append(_entity(
+            "skill", r["name"], group="Skill", summary=desc,
+            effects="", attrs={
+                "description": desc,
+                "principal": principal,
+                "attack": attack,
+            },
+            raw=r["raw"], source=rel_path,
+        ))
+    return out
+
+
+# ---- the kinds of Residue ---------------------------------------------
+def handle_residue(rel_path, raw, role, page):
+    out = []
+    for r in _records(raw, role, rel_path):
+        desc = r["description"].strip()
+        if len(desc) < 20 and not r["effects"]:
+            continue
+        out.append(_entity(
+            "residue", r["name"], group=r["group"] or "Residue",
+            summary=desc, effects=r["effects"],
+            attrs=r["attrs"] | {"description": desc},
+            raw=r["raw"], source=rel_path,
+        ))
+    # Elemental Residues are an indented sub-catalog: `*Aether*| *Value*: ...`
+    for m in re.finditer(
+            r"^\s+\*(?P<name>[A-Z][A-Za-z]+)\*\s*\|\s*\*Value\*\s*:\s*(?P<value>.+?)$(?P<body>(?:\n(?!\s+\*[A-Z][A-Za-z]+\*\s*\|).*)*)",
+            raw, re.M):
+        name = m.group("name").strip()
+        value = T.strip_md(m.group("value")).strip()
+        body = m.group("body")
+        effects = "\n".join(t.strip() for t in T.BACKTICK.findall(body))
+        desc = T.first_paragraph(T.clean_body(T.BACKTICK.sub(" ", body)))
+        out.append(_entity(
+            "residue", f"{name} Residue", group="Elemental Residues",
+            summary=desc, effects=effects,
+            attrs={"Value": value, "aspect": name, "description": desc},
+            raw=m.group(0).strip(), source=rel_path,
+        ))
+    return out
+
+
+# ---- Resources (bullet catalogs with Bulk values) ----------------------
+def handle_resources(rel_path, raw, role, page):
+    out = []
+    # general types: '- **Rare Metals**: Gold, Silver...' + a value table below
+    values = {}
+    vsec = re.search(r"\*\*Bulk Value\*\*(.*?)(?=\n\*\*|\Z)", raw, re.S)
+    if vsec:
+        for m in re.finditer(r"^-\s*\*\*(?P<n>[^*]+)\*\*\s*:\s*(?P<v>[\d,]+)\s*$", vsec.group(1), re.M):
+            values[m.group("n").strip()] = m.group("v").strip()
+    tsec = re.search(r"six general Types of Resource:(.*?)(?=\n\*\*|\Z)", raw, re.S)
+    if tsec:
+        for m in re.finditer(r"^-\s*\*\*(?P<n>[^*]+)\*\*\s*:\s*(?P<d>.+?)\s*$", tsec.group(1), re.M):
+            name = m.group("n").strip()
+            out.append(_entity(
+                "resource", name, group="Resource Types",
+                summary=T.strip_md(m.group("d")).strip(),
+                attrs={"Value per Bulk": values.get(name, ""), "examples": T.strip_md(m.group("d")).strip()},
+                raw=m.group(0).strip(), source=rel_path,
+            ))
+    # unique resources: '- **Caeline**: ...' followed by '  - *Value*: 1,600'
+    usec = re.search(r"\*\*Unique Resources\*\*(.*)\Z", raw, re.S)
+    if usec:
+        for m in re.finditer(
+                r"^-\s*\*\*(?P<n>[^*]+)\*\*\s*:\s*(?P<d>.+?)$(?P<body>(?:\n\s+-.*)*)",
+                usec.group(1), re.M):
+            name = m.group("n").strip()
+            vm = re.search(r"\*Value\*\s*:\s*(.+?)\s*$", m.group("body") or "", re.M)
+            out.append(_entity(
+                "resource", name, group="Unique Resources",
+                summary=T.strip_md(m.group("d")).strip(),
+                attrs={"Value": T.strip_md(vm.group(1)).strip() if vm else "",
+                       "description": T.strip_md(m.group("d")).strip()},
+                raw=m.group(0).strip(), source=rel_path,
+            ))
+    return out
+
+
 HANDLERS = {
     "discipline": handle_discipline,
     "weapons": handle_items,
@@ -397,20 +711,62 @@ HANDLERS = {
     "consumables": handle_consumables,
     "artifice": handle_artifice,
     "pacts": handle_pacts,
+    "skills": handle_skills,
+    "residue": handle_residue,
+    "resources": handle_resources,
+    "backgrounds": handle_backgrounds,
+    "cities": handle_cities,
 }
+# generic prefixed catalogs (activities, ships, structures, battles, damage, fixations)
+for _role in CATALOG_SPECS:
+    HANDLERS[_role] = make_catalog_handler(_role)
+
+
+SWEEP_ROLES = list(CATALOG_SPECS)  # prefixed catalogs can appear in ANY chapter
 
 
 def parse_file(rel_path: str, raw: str) -> dict:
-    """Return a page dict with its `records` populated."""
+    """Return a page dict with its `records` populated.
+
+    Two passes:
+      1. the file's registered role handler (its primary content), then
+      2. a SWEEP for every prefixed catalog (`Unit: **X**`, `General Activity: **X**`…)
+         so records are found wherever the authors put them — activities live in
+         discipline chapters, structures in both Cities and Building an Outpost —
+         and so a future PHB that moves content still imports cleanly.
+    """
     role, _desc = role_for(rel_path)
     page = build_page(rel_path, raw, role)
+    records: list[dict] = []
+    errors: list[str] = []
+
     handler = HANDLERS.get(role)
     if handler:
         try:
-            page["records"] = handler(rel_path, raw, role, page)
+            records = handler(rel_path, raw, role, page)
         except Exception as exc:  # never let one file break the whole import
-            page["records"] = []
-            page["parse_error"] = f"{type(exc).__name__}: {exc}"
+            errors.append(f"{role}: {type(exc).__name__}: {exc}")
+
+    seen = {(r["kind"], r["name"].lower()) for r in records}
+    for sweep_role in SWEEP_ROLES:
+        if sweep_role == role:
+            continue
+        spec = CATALOG_SPECS[sweep_role]
+        # cheap guard: only run the sweep when a prefix actually occurs in the file
+        if not any(re.search(rf"^{p}\s*:\s*\*\*", raw, re.M | re.I) for p in spec["prefix_names"]):
+            continue
+        try:
+            for rec in make_catalog_handler(sweep_role)(rel_path, raw, sweep_role, page):
+                key = (rec["kind"], rec["name"].lower())
+                if key not in seen:
+                    seen.add(key)
+                    records.append(rec)
+        except Exception as exc:
+            errors.append(f"sweep/{sweep_role}: {type(exc).__name__}: {exc}")
+
+    page["records"] = records
+    if errors:
+        page["parse_error"] = "; ".join(errors)
     return page
 
 

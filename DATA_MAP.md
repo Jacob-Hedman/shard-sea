@@ -18,6 +18,17 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 | `5_Equipment/d_Consumables.md` | `consumables` | Consumables (alcohols, tonics, poisons...) |
 | `Appendix/d_Rituals.md` | `rituals` | Arcane rituals (Runes / Reagents / Time / effect) |
 | `Appendix/f_Rare Pacts.md` | `pacts` | Rare demonic pacts (bindings) |
+| `1_Making Characters/d_Activities and Time.md` | `activities` | Skill Activities (General/Exclusive), grouped by Skill |
+| `1_Making Characters/e_Tests and Skills.md` | `skills` | The 10 core Skills + the Test/Coin-Flip rules |
+| `5_Equipment/h_Ships.md` | `ships` | Ship cards, ship weapons, expansions, crew & ship actions |
+| `5_Equipment/e_Resources.md` | `resources` | Resource types & unique resources (with Bulk values) |
+| `5_Equipment/f_The Kinds of Residue.md` | `residue` | The kinds of Residue (artificial, natural, elemental) |
+| `6_Cities, Battles, and Outposts/e_Structures.md` | `structures` | Outpost/city structures & institutions |
+| `6_Cities, Battles, and Outposts/b_Battles.md` | `battles` | Battle cards: units, commanders, supplements |
+| `2_Survival/b_Attacks, Damage, and Injuries.md` | `damage` | Damage types with their injury tables |
+| `2_Survival/c_Panic, Corruption, and Fixations.md` | `fixations` | Fixations (corruption-driven psyche states) |
+| `1_Making Characters/c_Backgrounds and Contacts.md` | `backgrounds` | Backgrounds (starting wealth, contacts, environment) |
+| `6_Cities, Battles, and Outposts/a_Cities.md` | `cities` | City zones & structures by Spoke of Civilization |
 | `*` | `page` | Prose rules / lore page (rendered faithfully; no record extraction) |
 
 ## Records extracted from v17
@@ -25,33 +36,58 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 | Role | Files | Record kinds (count) |
 |---|---|---|
 | `actions` | 1 | action (27) |
+| `activities` | 1 | activity (33) |
 | `archetypes` | 1 | archetype (6) |
 | `armor` | 1 | armor (7), material (5) |
 | `artifice` | 1 | artifice (42) |
+| `backgrounds` | 1 | activity (1), background (6) |
+| `battles` | 1 | battle_card (12) |
+| `cities` | 1 | battle_card (4), city_zone (33), structure (1) |
 | `conditions` | 1 | condition (15) |
 | `consumables` | 1 | consumable (11) |
 | `custom` | 1 | artifice (2) |
-| `discipline` | 30 | discipline (30), feat (200), pact (6), rune (36) |
+| `damage` | 1 | damage_type (13) |
+| `discipline` | 30 | activity (4), discipline (30), feat (200), pact (6), rune (36) |
+| `fixations` | 1 | fixation (5) |
 | `pacts` | 1 | pact (2) |
-| `page` | 27 | — (page only) |
+| `page` | 16 | activity (3), structure (10), threshold_feat (9) |
+| `residue` | 1 | residue (11) |
+| `resources` | 1 | resource (12) |
 | `rituals` | 1 | ritual (5) |
-| `weapons` | 1 | material (5), weapon (48) |
+| `ships` | 1 | ship (30) |
+| `skills` | 1 | skill (10) |
+| `structures` | 1 | structure (9) |
+| `weapons` | 1 | material (5), weapon (48), weapon_group (8), weapon_trait (13) |
 
 ## Totals by kind
 
 - **action**: 27
+- **activity**: 41
 - **archetype**: 6
 - **armor**: 7
 - **artifice**: 44
+- **background**: 6
+- **battle_card**: 16
+- **city_zone**: 33
 - **condition**: 15
 - **consumable**: 11
+- **damage_type**: 13
 - **discipline**: 30
 - **feat**: 200
+- **fixation**: 5
 - **material**: 10
 - **pact**: 8
+- **residue**: 11
+- **resource**: 12
 - **ritual**: 5
 - **rune**: 36
+- **ship**: 30
+- **skill**: 10
+- **structure**: 20
+- **threshold_feat**: 9
 - **weapon**: 48
+- **weapon_group**: 8
+- **weapon_trait**: 13
 
 - **pages**: 67
 

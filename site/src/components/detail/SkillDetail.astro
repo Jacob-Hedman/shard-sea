@@ -1,0 +1,82 @@
+---
+import { loadFull } from '../../lib/data';
+import { hrefFor } from '../../lib/sections';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const name = rec.name;
+
+// A Skill is the spine of the game — everything that hangs off it is the point
+// of having a Skill page at all.
+const disciplines = (loadFull('discipline') as any[])
+  .filter((d) => d.skill === name)
+  .sort((a, b) => a.name.localeCompare(b.name));
+const activities = (loadFull('activity') as any[])
+  .filter((a) => a.group === name)
+  .sort((a, b) => a.name.localeCompare(b.name));
+const archetypes = (loadFull('archetype') as any[])
+  .filter((a) => new RegExp(`\\b${name}\\b`, 'i').test(a.skills || ''))
+  .sort((a, b) => a.name.localeCompare(b.name));
+const featCount = (loadFull('feat') as any[]).filter((f) => f.skill === name).length;
+
+const chip = 'rounded-md border border-line bg-surface px-2 py-1 text-xs text-muted transition hover:border-gold/40 hover:text-gold';
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <dl class="card px-4 py-1.5">
+      <div class="stat-row"><dt>Kind</dt><dd class="text-ink">{rec.principal ? 'Principal Skill' : 'Skill'}</dd></div>
+      {rec.attack && <div class="stat-row"><dt>Attacks</dt><dd class="text-ink">{rec.attack}</dd></div>}
+      <div class="stat-row"><dt>Disciplines</dt><dd class="text-ink">{disciplines.length}</dd></div>
+      <div class="stat-row"><dt>Feats</dt><dd class="text-ink">{featCount}</dd></div>
+      <div class="stat-row"><dt>Activities</dt><dd class="text-ink">{activities.length}</dd></div>
+    </dl>
+  </aside>
+
+  <div class="min-w-0 space-y-6 lg:order-1">
+    <p class="text-[15px] leading-relaxed text-muted">{rec.description || rec.summary}</p>
+    {rec.principal && (
+      <p class="rounded-lg border border-gold/30 bg-gold/5 px-3.5 py-2.5 text-sm text-muted">
+        <span class="font-semibold text-gold">Principal Skill.</span>{' '}
+        Used to make and defend against {rec.attack || 'certain'} Attacks. A character may have at most two.
+      </p>
+    )}
+
+    {disciplines.length > 0 && (
+      <section>
+        <h2 class={LABEL}>Disciplines under {name}</h2>
+        <div class="grid gap-2.5 sm:grid-cols-2">
+          {disciplines.map((d) => (
+            <a href={hrefFor('discipline', d.slug)} class="card card-hover p-3">
+              <div class="font-medium text-ink">{d.name}</div>
+              {d.passive && <p class="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted">{d.passive}</p>}
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {activities.length > 0 && (
+      <section>
+        <h2 class={LABEL}>Activities governed by {name}</h2>
+        <div class="flex flex-wrap gap-1.5">
+          {activities.map((a) => (
+            <a href={hrefFor('activity', a.slug)} class={chip}>{a.name}</a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {archetypes.length > 0 && (
+      <section>
+        <h2 class={LABEL}>Archetypes using {name}</h2>
+        <div class="flex flex-wrap gap-1.5">
+          {archetypes.map((a) => (
+            <a href={hrefFor('archetype', a.slug)} class={chip}>{a.name}</a>
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+</div>
