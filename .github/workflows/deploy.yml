@@ -1,14 +1,13 @@
 name: Deploy to Cloudflare Pages
 
-# Push-to-deploy: every push to main builds the site (in site/) and deploys it
-# plus the functions/ auth middleware to the shard-sea-codex Pages project. The
-# project's SITE_PASSWORD / SESSION_SECRET secrets live on Cloudflare and persist
-# across deploys — not needed here. Only a CLOUDFLARE_API_TOKEN repo secret
-# (permission: Account · Cloudflare Pages · Edit) is required.
+# CI: every push to main builds the site (in site/) as a smoke-test, and — ONLY
+# when a CLOUDFLARE_API_TOKEN repo secret is present — deploys it (plus the
+# functions/ auth middleware) to the shard-sea-codex Pages project.
 #
-# NOTE: this workflow file lives at site/.github/workflows/deploy.yml in the repo
-# during development; to activate CI it must sit at .github/workflows/deploy.yml
-# in the repo ROOT. See site/README for the one-time setup.
+# The deploy step is guarded so the workflow does NOT fail when the token is
+# absent (it just skips deploying). Until the token is added, deploys are done
+# manually with `wrangler pages deploy` (see site/README). To enable auto-deploy,
+# add a repo secret CLOUDFLARE_API_TOKEN (permission: Account · Cloudflare Pages · Edit).
 on:
   push:
     branches: [main]
@@ -23,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     defaults:
       run:
         working-directory: site
@@ -36,9 +37,15 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Deploy to Cloudflare Pages
+        if: env.CF_TOKEN != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: f88d80f36c0f36bdf2f49e6d522fc82c
           workingDirectory: site
           command: pages deploy dist --project-name shard-sea-codex --branch main
+      - name: Deploy skipped (no CLOUDFLARE_API_TOKEN secret)
+        if: env.CF_TOKEN == ''
+        run: |
+          echo "::notice::Build succeeded. Deploy was skipped because the CLOUDFLARE_API_TOKEN repo secret is not set."
+          echo "Add it (Settings → Secrets and variables → Actions) to enable push-to-deploy; until then, deploy manually with wrangler."
