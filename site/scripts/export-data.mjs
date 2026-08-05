@@ -83,8 +83,25 @@ for (const t of ['feat', 'discipline', 'weapon', 'armor', 'archetype', 'conditio
   typed[t] = new Map(q(`SELECT * FROM ${t}`).map((r) => [r.entity_id, r]));
 }
 
-// lookups: source_path -> page {slug,title}; source_path -> discipline entity
-const pageByPath = new Map(pages.map((p) => [p.source_path, p]));
+// Assign each prose page to a browsable "section", and drop the redundant
+// per-discipline pages (their prose already lives in the discipline records).
+function pageSection(sp) {
+  if (sp.startsWith('custom/')) return null;
+  if (sp.startsWith('1_')) return 'character';
+  if (sp.startsWith('2_')) return 'survival';
+  if (sp.startsWith('3_')) return 'play';
+  if (/Arcane Magic\.md$|\/ARCANE\.md$/i.test(sp)) return 'spells';
+  if (sp.startsWith('5_Equipment/a_')) return 'items-general';
+  if (sp.startsWith('5_Equipment/e_')) return 'resources';
+  if (sp.startsWith('5_Equipment/f_')) return 'residue';
+  if (sp.startsWith('5_Equipment/h_')) return 'ships';
+  if (sp.startsWith('6_')) return 'settlements';
+  if (/^Appendix\/(a_|b_|c_)/.test(sp)) return 'lore';
+  return null;
+}
+const keptPages = pages.filter((p) => !(p.role === 'discipline' && pageSection(p.source_path) === null));
+// lookups: source_path -> page; source_path -> discipline entity
+const pageByPath = new Map(keptPages.map((p) => [p.source_path, p]));
 const discByPath = new Map();
 for (const e of entities) if (e.kind === 'discipline') discByPath.set(e.source_path, e);
 
@@ -127,12 +144,14 @@ function exportKind(kind, build) {
   for (const e of rows) {
     const rec = baseRec(e);
     const { facets = {}, sub = '', desc } = build(rec, e) || {};
-    rec.facets = { ...provFacets(SOURCE), ...facets };
+    // build() may override rec.content_type (e.g. custom artifice items).
+    rec.facets = { ...provFacets(SOURCE), content_type: [rec.content_type], ...facets };
     full.push(rec);
     index.push({
       id: e.id, slug: e.slug, name: e.name, kind,
       sub, desc: snippet(desc ?? rec.summary ?? rec.effects),
-      source: SOURCE, content_type: CT, license: LICENSE, facets: rec.facets,
+      tier: rec.tier ?? null,
+      source: SOURCE, content_type: rec.content_type, license: LICENSE, facets: rec.facets,
     });
   }
   emit(kind, full, index);
@@ -188,8 +207,10 @@ exportKind('rune', (rec, e) => {
   const disc = discByPath.get(e.source_path);
   rec.discipline_name = disc ? disc.name : '';
   rec.discipline_slug = disc ? disc.slug : null;
+  const tierMatch = /(\d+)/.exec(rec.group || '');   // "Tier 1 Runes" -> 1
+  if (tierMatch) rec.tier = Number(tierMatch[1]);
   return {
-    facets: { rune_class: arr(rec.rune_class), tier: arr(rec.group) },
+    facets: { rune_class: arr(rec.rune_class), tier: arr(rec.tier != null ? `Tier ${rec.tier}` : rec.group) },
     sub: [rec.rune_class, rec.group].filter(Boolean).join(' · '),
     desc: rec.effects || rec.description,
   };
@@ -245,12 +266,69 @@ exportKind('armor', (rec, e) => {
 
 // MATERIAL
 exportKind('material', (rec) => {
-  rec.multiplier = rec.attrs.Multipier || rec.attrs.Multiplier || '';
+  rec.multiplier = rec.attrs.Multiplier || rec.attrs.Multipier || '';
   rec.applies_to = rec.attrs.applies_to || '';
+  rec.pricing_formula = rec.attrs.pricing_formula || 'Price + Bulk × (Material Value Multiplier)';
+  rec.pricing_example = rec.attrs.pricing_example || (rec.multiplier ? `Price + Bulk × ${rec.multiplier}` : '');
   return {
     facets: { applies_to: arr(rec.applies_to) },
     sub: [rec.applies_to, rec.multiplier].filter(Boolean).join(' · '),
     desc: rec.effects,
+  };
+});
+
+// RITUAL
+exportKind('ritual', (rec) => {
+  rec.runes = rec.attrs.Runes || '';
+  rec.reagents = rec.attrs.Reagents || '';
+  rec.time = rec.attrs.Time || '';
+  return {
+    facets: {},
+    sub: [rec.time ? `Ritual · ${rec.time}` : 'Ritual'].filter(Boolean).join(' · '),
+    desc: rec.summary || rec.effects,
+  };
+});
+
+// PACT (bindings)
+exportKind('pact', (rec) => {
+  rec.invocation = rec.attrs.invocation || '';
+  rec.lore = rec.attrs.lore || '';
+  return {
+    facets: {},
+    sub: 'Binding',
+    desc: rec.lore || rec.summary || rec.effects,
+  };
+});
+
+// CONSUMABLE
+exportKind('consumable', (rec) => {
+  rec.cost = rec.attrs.Cost || '';
+  rec.traits = rec.attrs.Traits || '';
+  rec.effect = rec.effects || '';
+  return {
+    facets: { category: arr(rec.group) },
+    sub: [rec.group, rec.cost ? `Cost ${rec.cost}` : ''].filter(Boolean).join(' · '),
+    desc: rec.effect || rec.summary,
+  };
+});
+
+// ARTIFICE (magical items, automata, augmentations — plus player-made customs)
+exportKind('artifice', (rec) => {
+  rec.pattern = rec.attrs.Pattern || '';
+  rec.bulk = rec.attrs.Bulk || '';
+  rec.cost = rec.attrs.Cost || '';
+  rec.activation = rec.attrs.Activation || '';
+  rec.category = rec.attrs.category || rec.group || 'Artifice';
+  rec.description = rec.attrs.description || '';
+  rec.custom = rec.attrs.custom === true;
+  rec.made_on = rec.attrs.made_on || '';
+  rec.status = rec.attrs.status || '';
+  rec.outdated = rec.status === 'outdated';
+  if (rec.custom) rec.content_type = 'custom';
+  return {
+    facets: { category: arr(rec.category), custom: rec.custom ? ['Custom'] : [] },
+    sub: [rec.category, rec.custom ? (rec.outdated ? 'custom · outdated' : 'custom') : ''].filter(Boolean).join(' · '),
+    desc: rec.summary || rec.description || rec.effects,
   };
 });
 
@@ -281,18 +359,20 @@ exportKind('action', (rec, e) => {
   };
 });
 
-// PAGE (prose chapters + lore) — from the page table, not entity
+// PAGE (prose chapters + lore) — from the page table, not entity. Each carries
+// a `section` (see pageSection) so the site's prose sections can filter them.
 {
   const full = [];
   const index = [];
-  const ordered = pages.slice().sort((a, b) =>
+  const ordered = keptPages.slice().sort((a, b) =>
     (a.chapter_no || 99) - (b.chapter_no || 99) || (a.section_order || 99) - (b.section_order || 99));
   for (const p of ordered) {
     const chapter = p.chapter || 'Appendix';
+    const section = pageSection(p.source_path);
     const rec = {
       id: p.id, kind: 'page', name: p.title, slug: p.slug,
       source: SOURCE, content_type: CT, license: LICENSE,
-      chapter, chapter_no: p.chapter_no, section_order: p.section_order,
+      chapter, chapter_no: p.chapter_no, section_order: p.section_order, section,
       role: p.role, source_path: p.source_path, record_count: p.record_count,
       summary: p.summary || '', body_md: p.body_md || '', text: p.body_md || '',
       facets: { ...provFacets(SOURCE), chapter: arr(chapter) },
@@ -300,11 +380,18 @@ exportKind('action', (rec, e) => {
     full.push(rec);
     index.push({
       id: p.id, slug: p.slug, name: p.title, kind: 'page',
-      sub: chapter, desc: snippet(p.summary || p.body_md),
+      sub: chapter, desc: snippet(p.summary || p.body_md), section,
       source: SOURCE, content_type: CT, license: LICENSE, facets: rec.facets,
     });
   }
   emit('page', full, index);
+  // prose-section counts (kind == pageKey in sections.ts) for the nav.
+  const secCounts = {};
+  for (const p of ordered) {
+    const s = pageSection(p.source_path);
+    if (s) secCounts[s] = (secCounts[s] || 0) + 1;
+  }
+  for (const [k, c] of Object.entries(secCounts)) sections.push({ kind: k, count: c });
 }
 
 // ---------------------------------------------------------------- changelog + versions

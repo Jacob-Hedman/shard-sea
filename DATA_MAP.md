@@ -14,6 +14,10 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 | `5_Equipment/c_Armor and Shields.md` | `armor` | Armor & Shields + Unique Materials |
 | `3_Playing the Game/f_Conditions.md` | `conditions` | Conditions grouped by Severity |
 | `3_Playing the Game/a_Actions.md` | `actions` | Actions grouped by type (Movement/Primary/...) |
+| `5_Equipment/g_Artifice and Magic Items.md` | `artifice` | Artifice items, automata & augmentations |
+| `5_Equipment/d_Consumables.md` | `consumables` | Consumables (alcohols, tonics, poisons...) |
+| `Appendix/d_Rituals.md` | `rituals` | Arcane rituals (Runes / Reagents / Time / effect) |
+| `Appendix/f_Rare Pacts.md` | `pacts` | Rare demonic pacts (bindings) |
 | `*` | `page` | Prose rules / lore page (rendered faithfully; no record extraction) |
 
 ## Records extracted from v17
@@ -23,9 +27,14 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 | `actions` | 1 | action (27) |
 | `archetypes` | 1 | archetype (6) |
 | `armor` | 1 | armor (7), material (5) |
+| `artifice` | 1 | artifice (42) |
 | `conditions` | 1 | condition (15) |
-| `discipline` | 30 | discipline (30), feat (200), rune (36) |
-| `page` | 31 | — (page only) |
+| `consumables` | 1 | consumable (11) |
+| `custom` | 1 | artifice (2) |
+| `discipline` | 30 | discipline (30), feat (200), pact (6), rune (36) |
+| `pacts` | 1 | pact (2) |
+| `page` | 27 | — (page only) |
+| `rituals` | 1 | ritual (5) |
 | `weapons` | 1 | material (5), weapon (48) |
 
 ## Totals by kind
@@ -33,14 +42,18 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 - **action**: 27
 - **archetype**: 6
 - **armor**: 7
+- **artifice**: 44
 - **condition**: 15
+- **consumable**: 11
 - **discipline**: 30
 - **feat**: 200
 - **material**: 10
+- **pact**: 8
+- **ritual**: 5
 - **rune**: 36
 - **weapon**: 48
 
-- **pages**: 66
+- **pages**: 67
 
 ## Where each kind is stored
 

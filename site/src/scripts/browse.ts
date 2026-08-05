@@ -12,6 +12,7 @@ interface Rec {
   kind: string;
   sub?: string;
   desc?: string;
+  tier?: number | null;
   source: string;
   content_type: string;
   license: string;
@@ -80,6 +81,8 @@ export async function initBrowse() {
   const countEl = document.getElementById('browse-count')!;
   const moreBtn = document.getElementById('browse-more') as HTMLButtonElement;
   const qInput = document.getElementById('browse-q') as HTMLInputElement;
+  const sortSel = document.getElementById('browse-sort') as HTMLSelectElement | null;
+  const defaultSort = root.dataset.defaultSort || 'name';
 
   resultsEl.innerHTML = skeleton();
 
@@ -91,6 +94,26 @@ export async function initBrowse() {
     return;
   }
   records.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Sort control: default per section (tiered listings default to Tier ascending,
+  // T1 first). Hidden entirely when the kind has no tier data.
+  const hasTiers = records.some((r) => r.tier != null);
+  if (sortSel) {
+    if (!hasTiers) sortSel.classList.add('hidden');
+    else sortSel.value = defaultSort === 'tier' ? 'tier' : 'name';
+  }
+  function sortRecs(list: Rec[]): Rec[] {
+    const mode = (sortSel && !sortSel.classList.contains('hidden') ? sortSel.value : defaultSort);
+    const byName = (a: Rec, b: Rec) => a.name.localeCompare(b.name);
+    if (mode === 'tier') {
+      return list.sort((a, b) => {
+        const ta = a.tier == null ? Infinity : a.tier;
+        const tb = b.tier == null ? Infinity : b.tier;
+        return ta - tb || byName(a, b);
+      });
+    }
+    return list.sort(byName);
+  }
 
   // distinct facet values + counts
   const facetValues: Record<string, Map<string, number>> = {};
@@ -229,6 +252,7 @@ export async function initBrowse() {
       }
       return true;
     });
+    sortRecs(filtered);
     render(true);
   }
 
@@ -315,7 +339,8 @@ export async function initBrowse() {
     page++;
     render(false);
   });
+  sortSel?.addEventListener('change', () => apply());
 
   renderChips();
-  render(true);
+  apply(); // initial render honors the default sort
 }

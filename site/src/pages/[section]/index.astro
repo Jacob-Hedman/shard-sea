@@ -1,81 +1,125 @@
 ---
 import Layout from '../../components/Layout.astro';
-import { SECTIONS, sectionByRoute, allFacets } from '../../lib/sections';
-import { loadMeta, countFor } from '../../lib/data';
+import EntityDetail from '../../components/EntityDetail.astro';
+import { SECTIONS, sectionByRoute, allFacets, isPages } from '../../lib/sections';
+import { loadMeta, countFor, loadFull } from '../../lib/data';
 
 export function getStaticPaths() {
-  return SECTIONS.map((s) => ({ params: { section: s.route } }));
+  return SECTIONS.filter((s) => !s.hidden).map((s) => ({ params: { section: s.route } }));
 }
 
 const route = Astro.params.section!;
 const section = sectionByRoute(route)!;
 const meta = loadMeta();
+
+// ---- prose ('pages') section: render the chapter(s) ----
+let prosePages: any[] = [];
+if (isPages(section)) {
+  prosePages = (loadFull('page') as any[])
+    .filter((p) => p.section === section.pageKey)
+    .sort((a, b) => (a.chapter_no || 99) - (b.chapter_no || 99) || (a.section_order || 99) - (b.section_order || 99));
+}
+const single = isPages(section) && prosePages.length === 1 ? prosePages[0] : null;
+
+// ---- records section ----
 const count = countFor(meta, section.kind);
 const facets = allFacets(section);
 ---
 
-<Layout title={section.label} description={section.blurb}>
-  <div class="mx-auto max-w-[80rem]">
-    <header class="mb-5">
-      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{section.label}</h1>
-        <span class="font-mono text-xs text-faint">{count.toLocaleString()} total</span>
-      </div>
-      <p class="mt-1 text-sm text-muted">{section.blurb}</p>
-    </header>
-
-    <div
-      id="browse"
-      data-kind={section.kind}
-      data-route={section.route}
-      data-facets={JSON.stringify(facets)}
-      data-default-include={section.defaultIncludeContent?.join(',') ?? ''}
-    >
-      <div class="mb-5 space-y-3">
-        <div class="flex items-center gap-2.5">
-          <div class="relative min-w-0 flex-1">
-            <i class="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint" aria-hidden="true"></i>
-            <input
-              id="browse-q"
-              type="text"
-              autocomplete="off"
-              placeholder={`Search ${section.label.toLowerCase()} by name…`}
-              class="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-line-strong placeholder:text-faint"
-            />
+{isPages(section) ? (
+  <Layout title={single ? single.name : section.label} description={section.blurb}>
+    <div class="mx-auto max-w-6xl">
+      {single ? (
+        <EntityDetail rec={single} />
+      ) : (
+        <>
+          <header class="mb-5">
+            <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{section.label}</h1>
+            <p class="mt-1 text-sm text-muted">{section.blurb}</p>
+          </header>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {prosePages.map((p) => (
+              <a href={`/pages/${p.slug}`} class="card card-hover flex flex-col p-4">
+                <h3 class="font-semibold leading-tight text-ink">{p.name}</h3>
+                {p.summary && <p class="mt-1.5 line-clamp-3 text-sm text-muted">{p.summary}</p>}
+              </a>
+            ))}
           </div>
-          <span id="browse-count" class="hidden whitespace-nowrap font-mono text-xs text-faint sm:block"></span>
+        </>
+      )}
+    </div>
+  </Layout>
+) : (
+  <Layout title={section.label} description={section.blurb}>
+    <div class="mx-auto max-w-[80rem]">
+      <header class="mb-5">
+        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{section.label}</h1>
+          <span class="font-mono text-xs text-faint">{count.toLocaleString()} total</span>
+        </div>
+        <p class="mt-1 text-sm text-muted">{section.blurb}</p>
+      </header>
+
+      <div
+        id="browse"
+        data-kind={section.kind}
+        data-route={section.route}
+        data-facets={JSON.stringify(facets)}
+        data-default-sort={section.defaultSort ?? 'name'}
+        data-default-include={section.defaultIncludeContent?.join(',') ?? ''}
+      >
+        <div class="mb-5 space-y-3">
+          <div class="flex items-center gap-2.5">
+            <div class="relative min-w-0 flex-1">
+              <i class="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint" aria-hidden="true"></i>
+              <input
+                id="browse-q"
+                type="text"
+                autocomplete="off"
+                placeholder={`Search ${section.label.toLowerCase()} by name…`}
+                class="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-line-strong placeholder:text-faint"
+              />
+            </div>
+            <select
+              id="browse-sort"
+              aria-label="Sort order"
+              class="shrink-0 rounded-lg border border-line bg-surface px-2.5 py-2 text-xs text-muted outline-none transition hover:border-line-strong focus:border-line-strong"
+            >
+              <option value="tier">Tier ↑</option>
+              <option value="name">A → Z</option>
+            </select>
+            <span id="browse-count" class="hidden whitespace-nowrap font-mono text-xs text-faint sm:block"></span>
+          </div>
+
+          <div id="browse-cats" class="flex flex-wrap items-center gap-2"></div>
+          <div id="browse-chips" class="flex flex-wrap items-center gap-1.5"></div>
+
+          <p class="text-xs text-faint">
+            Click a category to choose values, and combine categories to narrow results — remove any filter
+            with its <span class="text-gold">×</span>.
+          </p>
         </div>
 
-        <div id="browse-cats" class="flex flex-wrap items-center gap-2"></div>
-        <div id="browse-chips" class="flex flex-wrap items-center gap-1.5"></div>
+        <div id="browse-results" class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
 
-        <p class="text-xs text-faint">
-          Click a category to choose values, and combine categories to narrow results — remove any filter
-          with its <span class="text-gold">×</span>.
-        </p>
+        <div class="mt-6 text-center">
+          <button
+            id="browse-more"
+            class="hidden rounded-lg border border-line bg-surface px-5 py-2 text-sm text-muted transition hover:border-line-strong hover:text-ink"
+          >
+            Load more
+          </button>
+        </div>
       </div>
 
-      <div id="browse-results" class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
-
-      <div class="mt-6 text-center">
-        <button
-          id="browse-more"
-          class="hidden rounded-lg border border-line bg-surface px-5 py-2 text-sm text-muted transition hover:border-line-strong hover:text-ink"
-        >
-          Load more
-        </button>
-      </div>
+      <noscript>
+        <p class="mt-6 text-muted">Filtering needs JavaScript. Press <kbd>/</kbd> to search by name instead.</p>
+      </noscript>
     </div>
 
-    <noscript>
-      <p class="mt-6 text-muted">Filtering needs JavaScript. Press <kbd>/</kbd> to search by name instead.</p>
-    </noscript>
-  </div>
-
-  <script>
-    import { initBrowse } from '../../scripts/browse';
-    // Runs on first load and after every View Transitions navigation; browse.ts
-    // guards against re-initialising the same #browse element.
-    document.addEventListener('astro:page-load', initBrowse);
-  </script>
-</Layout>
+    <script>
+      import { initBrowse } from '../../scripts/browse';
+      document.addEventListener('astro:page-load', initBrowse);
+    </script>
+  </Layout>
+)}

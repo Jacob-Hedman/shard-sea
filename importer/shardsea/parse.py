@@ -13,6 +13,7 @@ from .blocks import parse_block, split_blocks
 from .registry import ROLE_PATTERNS, role_for
 
 ITEM_KEYS = ("Tier", "Cost", "Price", "Bulk", "Durability", "Durable")
+MATERIAL_PRICING = "Price + Bulk × (Material Value Multiplier)"
 
 
 def _int(val: str | None) -> int | None:
@@ -107,7 +108,9 @@ def handle_discipline(rel_path, raw, role, page):
             "feat_count": len(feats), "is_special": int(is_special),
         }),
     )
-    return [disc] + feats + runes
+    # Binding's discipline page also defines the Arch-Demon Pacts (bindings).
+    pacts = _extract_pacts(raw, rel_path, restrict_after="Arch-Demons") if "Arch-Demons" in raw else []
+    return [disc] + feats + runes + pacts
 
 
 def handle_items(rel_path, raw, role, page):
@@ -115,10 +118,21 @@ def handle_items(rel_path, raw, role, page):
     out = []
     for r in _records(raw, role, rel_path):
         if r["kind"] == "material":
-            mult = r["attrs"].get("Multipier") or r["attrs"].get("Multiplier")
+            # A material's whole record sits on ONE bullet line:
+            #   - *Caeline*| *Multipier*: 8,000T| `effect...`
+            # so re-parse that line (the generic block body is empty here).
+            line = r["raw"]
+            pairs = dict(T.parse_attr_line(line))
+            mult = pairs.get("Multipier") or pairs.get("Multiplier") or ""
+            eff = "\n".join(t.strip() for t in T.BACKTICK.findall(line))
+            applies = ("Weapon" if "weapon" in rel_path.lower()
+                       else "Armor" if "armor" in rel_path.lower() else (r["section"] or "Equipment"))
             out.append(_entity(
-                "material", r["name"], group="Unique Materials", section=r["section"],
-                effects=r["effects"], attrs=r["attrs"] | {"applies_to": r["section"]},
+                "material", r["name"], group="Unique Materials", section=applies,
+                effects=eff,
+                attrs={"Multiplier": mult, "applies_to": applies,
+                       "pricing_formula": MATERIAL_PRICING,
+                       "pricing_example": f"Price + Bulk × {mult}" if mult else ""},
                 raw=r["raw"], source=rel_path,
             ))
             continue
@@ -230,6 +244,133 @@ def handle_actions(rel_path, raw, role, page):
     return out
 
 
+# ---- rituals & consumables (generic bold-name catalogs) ----------------
+def handle_rituals(rel_path, raw, role, page):
+    out = []
+    for r in _records(raw, role, rel_path):
+        if not any(k in r["attrs"] for k in ("Runes", "Reagents", "Time")):
+            continue
+        out.append(_entity(
+            "ritual", r["name"], group=r["group"], summary=r["description"] or r["flavor"],
+            effects=r["effects"], attrs=r["attrs"], raw=r["raw"], source=rel_path,
+        ))
+    return out
+
+
+def handle_consumables(rel_path, raw, role, page):
+    out = []
+    for r in _records(raw, role, rel_path):
+        if not any(k in r["attrs"] for k in ("Cost", "Price", "Tier", "Traits", "Active")):
+            continue
+        out.append(_entity(
+            "consumable", r["name"], group=r["group"] or r["section"],
+            tier=_int(r["attrs"].get("Tier")), summary=r["description"] or r["flavor"],
+            effects=r["effects"], attrs=r["attrs"], raw=r["raw"], source=rel_path,
+        ))
+    return out
+
+
+# ---- artifice items (italic-name records with a *Pattern* of Runes) -----
+ARTIFICE_NAME = re.compile(r"^\*(?P<name>[A-Z][A-Za-z0-9 ,/&'\-]{0,45})\*(?:\s*\||\s*$)")
+
+
+def handle_artifice(rel_path, raw, role, page):
+    lines = raw.replace("\r\n", "\n").split("\n")
+    n = len(lines)
+
+    def pattern_near(i):
+        return any("*Pattern*" in lines[j] or "*R*" in lines[j] for j in range(i, min(i + 4, n)))
+
+    starts, section = [], ""
+    for i, line in enumerate(lines):
+        h = T.HEADING.match(line)
+        if h:
+            section = re.sub(r"^#+\s*", "", h.group(2)).strip()
+            continue
+        m = ARTIFICE_NAME.match(line)
+        if m and ("*Pattern*" in line or pattern_near(i + 1)):
+            starts.append((i, m.group("name").strip(), section))
+
+    out = []
+    for idx, (i, name, section) in enumerate(starts):
+        end = starts[idx + 1][0] if idx + 1 < len(starts) else n
+        block = []
+        tail = ARTIFICE_NAME.sub("", lines[i], count=1)  # automata carry stats on the name line
+        if tail.strip():
+            block.append(tail)
+        for k in range(i + 1, end):
+            if T.HEADING.match(lines[k]):
+                break
+            block.append(lines[k])
+
+        attrs, effects, desc, flavor = {}, [], [], ""
+        for bl in block:
+            s = bl.strip()
+            if not s or T.HR_NOISE.match(s):
+                continue
+            q = T.QUOTE.match(s)
+            if q:
+                flavor = flavor or q.group(1).strip()
+                continue
+            pairs = T.parse_attr_line(bl)
+            ticks = [t.strip() for t in T.BACKTICK.findall(bl)]
+            if pairs:
+                attrs.update(dict(pairs))
+            if ticks:
+                effects.extend(ticks)
+            elif not pairs:
+                plain = T.strip_md(bl).strip()
+                if plain:
+                    desc.append(plain)
+
+        cat = section or "Artifice"
+        out.append(_entity(
+            "artifice", name, group=cat, section=cat, tier=_int(attrs.get("Tier")),
+            summary=flavor or (desc[0] if desc else ""), effects="\n".join(effects),
+            attrs=attrs | {"description": "\n".join(desc), "category": cat},
+            raw="\n".join(lines[i:end]).strip(), source=rel_path,
+        ))
+    return out
+
+
+# ---- pacts (Arch-Demons / Rare Pacts — records defined by #### headings) -
+def _extract_pacts(raw, source, restrict_after=None):
+    lines = raw.replace("\r\n", "\n").split("\n")
+    start_idx = 0
+    if restrict_after:
+        start_idx = None
+        for i, l in enumerate(lines):
+            h = T.HEADING.match(l)
+            if h and restrict_after.lower() in h.group(2).lower():
+                start_idx = i + 1
+                break
+        if start_idx is None:
+            return []
+    heads = []
+    for i in range(start_idx, len(lines)):
+        h = T.HEADING.match(lines[i])
+        if h and len(h.group(1)) >= 4:  # a #### heading = one pact
+            heads.append((i, re.sub(r"^#+\s*", "", h.group(2)).strip()))
+    out = []
+    for idx, (i, name) in enumerate(heads):
+        end = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines)
+        text = "\n".join(lines[i + 1:end])
+        fl = re.search(r'\*"(.+?)"\*', text, re.S)
+        flavor = fl.group(1).strip() if fl else ""
+        effects = "\n".join(t.strip() for t in T.BACKTICK.findall(text))
+        lore = T.first_paragraph(T.clean_body(re.sub(r'\*".+?"\*', '', text, flags=re.S)))
+        out.append(_entity(
+            "pact", name, group="Pact", summary=flavor or lore, effects=effects,
+            attrs={"invocation": flavor, "lore": lore},
+            raw="\n".join(lines[i:end]).strip(), source=source,
+        ))
+    return out
+
+
+def handle_pacts(rel_path, raw, role, page):
+    return _extract_pacts(raw, rel_path)
+
+
 HANDLERS = {
     "discipline": handle_discipline,
     "weapons": handle_items,
@@ -237,6 +378,10 @@ HANDLERS = {
     "archetypes": handle_archetypes,
     "conditions": handle_conditions,
     "actions": handle_actions,
+    "rituals": handle_rituals,
+    "consumables": handle_consumables,
+    "artifice": handle_artifice,
+    "pacts": handle_pacts,
 }
 
 
@@ -251,4 +396,25 @@ def parse_file(rel_path: str, raw: str) -> dict:
         except Exception as exc:  # never let one file break the whole import
             page["records"] = []
             page["parse_error"] = f"{type(exc).__name__}: {exc}"
+    return page
+
+
+def parse_custom(rel_path: str, raw: str, version: str) -> dict:
+    """Parse a player-authored custom-items file (same shape as the Artifice chapter).
+
+    Records are tagged custom + their `made_on` PHB version. They live outside the
+    PHB, so they are re-imported every time and never deleted — and are flagged
+    `outdated` when the current PHB has moved past the version they were made on.
+    """
+    page = build_page(rel_path, raw, "custom")
+    page["title"] = "Custom Items"
+    page["chapter"] = "Custom"
+    recs = handle_artifice(rel_path, raw, "artifice", page)
+    for r in recs:
+        made = r["attrs"].get("Made On") or r["attrs"].get("Made_On") or version
+        status = (r["attrs"].get("Status") or "").strip().lower()
+        if not status:
+            status = "outdated" if made != version else "current"
+        r["attrs"].update({"custom": True, "made_on": made, "status": status})
+    page["records"] = recs
     return page

@@ -1,13 +1,14 @@
 ---
 import Layout from '../../components/Layout.astro';
 import EntityDetail from '../../components/EntityDetail.astro';
-import { SECTIONS, sectionByRoute } from '../../lib/sections';
+import { SECTIONS, sectionByRoute, isRecords } from '../../lib/sections';
 import { cleanProse } from '../../lib/format';
 import { loadFull } from '../../lib/data';
 
 export function getStaticPaths() {
   const paths: any[] = [];
   for (const s of SECTIONS) {
+    if (!isRecords(s)) continue; // prose ('pages') sections have no per-slug detail here
     for (const rec of loadFull(s.kind)) {
       paths.push({ params: { section: s.route, slug: rec.slug }, props: { rec } });
     }

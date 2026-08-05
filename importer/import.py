@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # make `shardsea` importable
 
 from shardsea import changelog, datamap, db  # noqa: E402
-from shardsea.parse import parse_file  # noqa: E402
+from shardsea.parse import parse_file, parse_custom  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -76,6 +76,15 @@ def main() -> int:
     print(f"Parsing {len(files)} files from {source} ...")
 
     pages = [parse_file(rel, text) for rel, text in files]
+
+    # player-authored custom items live in custom/*.md (outside the PHB vault) and
+    # are merged every import so they persist across PHB versions.
+    custom_dir = REPO / "custom"
+    if custom_dir.exists():
+        for p in sorted(custom_dir.rglob("*.md")):
+            rel = "custom/" + p.relative_to(custom_dir).as_posix()
+            pages.append(parse_custom(rel, p.read_text(encoding="utf-8", errors="replace"), args.version))
+        print(f"  custom items merged: {sum(len(pg['records']) for pg in pages if pg['role'] == 'custom')}")
 
     # ---- report ----
     kinds = Counter()

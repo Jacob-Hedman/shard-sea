@@ -35,6 +35,10 @@ FILE_RULES: list[tuple[str, str, str]] = [
     ("5_Equipment/c_Armor and Shields.md", "armor", "Armor & Shields + Unique Materials"),
     ("3_Playing the Game/f_Conditions.md", "conditions", "Conditions grouped by Severity"),
     ("3_Playing the Game/a_Actions.md", "actions", "Actions grouped by type (Movement/Primary/...)"),
+    ("5_Equipment/g_Artifice and Magic Items.md", "artifice", "Artifice items, automata & augmentations"),
+    ("5_Equipment/d_Consumables.md", "consumables", "Consumables (alcohols, tonics, poisons...)"),
+    ("Appendix/d_Rituals.md", "rituals", "Arcane rituals (Runes / Reagents / Time / effect)"),
+    ("Appendix/f_Rare Pacts.md", "pacts", "Rare demonic pacts (bindings)"),
     ("*", "page", "Prose rules / lore page (rendered faithfully; no record extraction)"),
 ]
 
@@ -46,6 +50,10 @@ ROLE_PATTERNS: dict[str, list[RecordPattern]] = {
     "armor": [P_ITEM, P_MATERIAL],
     "conditions": [P_CONDITION, P_COND_BULLET],
     "actions": [P_ACTION],
+    "rituals": [P_ITEM],
+    "consumables": [P_ITEM],
+    "artifice": [],   # dedicated handler (italic-name lookahead)
+    "pacts": [],      # dedicated handler (#### heading records)
     "page": [],
 }
 

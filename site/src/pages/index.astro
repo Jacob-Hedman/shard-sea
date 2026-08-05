@@ -1,11 +1,14 @@
 ---
 import Layout from '../components/Layout.astro';
-import { sectionsByGroup, sectionByKind, hrefFor } from '../lib/sections';
+import { SECTIONS, sectionsByGroup, sectionByKind, hrefFor } from '../lib/sections';
 import { loadMeta, loadFull, countFor } from '../lib/data';
 
 const meta = loadMeta();
 const groups = sectionsByGroup();
-const total = meta.sections.reduce((a, s) => a + s.count, 0);
+// Total = extracted records only (page/prose kinds aren't "entries").
+const RECORD_KINDS = new Set(['discipline', 'feat', 'rune', 'archetype', 'weapon', 'armor', 'material', 'consumable', 'artifice', 'ritual', 'pact', 'condition', 'action']);
+const total = meta.sections.filter((s) => RECORD_KINDS.has(s.kind)).reduce((a, s) => a + s.count, 0);
+const categories = SECTIONS.filter((s) => !s.hidden).length;
 
 // A pool of evocative entry points; the client shows a rotating random handful.
 // Verified against the exported data at build time — anything missing drops out.
@@ -24,6 +27,10 @@ const PICKS: { kind: string; slug: string }[] = [
   { kind: 'armor', slug: 'buckler' }, { kind: 'condition', slug: 'on-fire' },
   { kind: 'condition', slug: 'bleeding' }, { kind: 'condition', slug: 'frenzied' },
   { kind: 'action', slug: 'strike' }, { kind: 'action', slug: 'maneuver' },
+  { kind: 'artifice', slug: 'imaginary-pocket' }, { kind: 'artifice', slug: 'flicker-tag' },
+  { kind: 'ritual', slug: 'mage-ward' }, { kind: 'ritual', slug: 'missile-array' },
+  { kind: 'pact', slug: 'sargatanas-the-knight-aflame' }, { kind: 'pact', slug: 'beelzebub-the-fly-unmade' },
+  { kind: 'consumable', slug: 'beer' },
   { kind: 'page', slug: 'the-sea' }, { kind: 'page', slug: 'the-wheel-of-wheels' },
   { kind: 'page', slug: 'gaia' },
 ];
@@ -57,7 +64,7 @@ const statChip =
       </span>
       <span class={statChip}>
         <i class="ti ti-category-2 text-sm text-gold/80" aria-hidden="true"></i>
-        <span class="font-mono text-ink">{meta.sections.length}</span> categories
+        <span class="font-mono text-ink">{categories}</span> categories
       </span>
       <a href="/changelog" class={`${statChip} transition hover:border-gold/40 hover:text-ink`}>
         <i class="ti ti-versions text-sm text-gold/80" aria-hidden="true"></i>

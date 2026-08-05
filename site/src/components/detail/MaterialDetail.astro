@@ -1,0 +1,41 @@
+---
+import Prose from '../Prose.astro';
+import StatBlock from '../StatBlock.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const rows = [
+  { label: 'Applies to', value: rec.applies_to },
+  { label: 'Value ×', value: rec.multiplier },
+];
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <StatBlock rows={rows} />
+  </aside>
+  <div class="min-w-0 space-y-6 lg:order-1">
+    {rec.effects && (
+      <section>
+        <h2 class={LABEL}>Effect</h2>
+        <Prose text={rec.effects} />
+      </section>
+    )}
+    <section>
+      <h2 class={LABEL}>Pricing</h2>
+      <div class="card px-4 py-3.5">
+        <p class="text-sm text-muted">
+          Adding {rec.name} to {rec.applies_to?.toLowerCase() || 'an item'} raises its price by the
+          material's value multiplier:
+        </p>
+        <p class="mt-2 font-mono text-sm text-ink">{rec.pricing_formula}</p>
+        {rec.pricing_example && (
+          <p class="mt-2 border-t border-line pt-2 font-mono text-sm">
+            <span class="text-faint">For {rec.name}: </span><span class="text-gold">{rec.pricing_example}</span>
+          </p>
+        )}
+      </div>
+    </section>
+  </div>
+</div>

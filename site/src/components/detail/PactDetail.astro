@@ -1,0 +1,25 @@
+---
+import Prose from '../Prose.astro';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+---
+
+<div class="max-w-3xl space-y-5">
+  <span class="inline-flex items-center gap-1 rounded-md border border-nonogl/40 bg-nonogl/5 px-2 py-0.5 text-[11px] font-medium text-nonogl">
+    <i class="ti ti-skull text-[13px]" aria-hidden="true"></i>Binding pact
+  </span>
+  {rec.invocation && (
+    <blockquote class="border-l-2 border-nonogl/50 pl-3.5 text-[15px] italic leading-relaxed text-muted">
+      “{rec.invocation}”
+    </blockquote>
+  )}
+  {rec.lore && <p class="text-[15px] leading-relaxed text-muted">{rec.lore}</p>}
+  {rec.effects && (
+    <section>
+      <h2 class={LABEL}>The Pact</h2>
+      <Prose text={rec.effects} />
+    </section>
+  )}
+</div>
