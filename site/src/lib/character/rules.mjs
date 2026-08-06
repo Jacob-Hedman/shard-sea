@@ -41,6 +41,9 @@ export const CORRUPTION_SCALE = [
   { key: 'dark', label: 'Dark', min: 6, max: 11 },
   { key: 'morbid', label: 'Morbid', min: 12, max: 17 },
 ];
+export const AP_PER_TURN = 3;               // gain 3 AP at the start of your Turn (PHB Combat)
+// Panic Risk pool sizes by severity; reduced by your Mind bonus, minimum one.
+export const PANIC_POOL = { minor: 2, moderate: 3, major: 6 };
 // EXP economy (PHB advancement + the group's ADVANCEMENT sheet)
 export const CREATION_EXP = 500;
 export const ABILITY_ADVANCE_PER_TIER = 6;   // ≤ 6 ability advances per Tier
@@ -55,18 +58,25 @@ export function abilityBonus(adjusted) {
   return Math.max(0, Math.floor(adjusted / 6));
 }
 
-/** Adjusted Ability = Base − Strain + manual Bonus (min 0). Strain lowers every ability. */
-export function adjustedAbility(base, bonus, strain) {
+/** Adjusted Ability = Base + Bonus − strain penalty (min 0). Strain only bites
+ *  once it exceeds your Reserve (PHB a_Health), so `penalty` is that excess. */
+export function adjustedAbility(base, bonus, penalty) {
   return ex(
-    Math.max(0, base - strain + bonus),
-    'Base − Strain + Bonus',
+    Math.max(0, base + bonus - penalty),
+    penalty ? 'Base + Bonus − strain over Reserve' : 'Base + Bonus',
     [
       { label: 'Base', value: base },
-      { label: 'Strain', value: -strain },
       { label: 'Bonus', value: bonus },
+      { label: 'strain', value: -penalty },
     ].filter((p) => p.label === 'Base' || p.value !== 0),
   );
 }
+
+/** Reserve = Tier + Body Bonus (your capacity to soak Strain before it hurts). */
+export function reserve(tier, bodyBonus) {
+  return ex(tier + bodyBonus, 'Tier + Body bonus', [{ label: 'Tier', value: tier }, { label: 'Body bonus', value: bodyBonus }]);
+}
+export const panicPool = (base, mindBonus) => Math.max(1, base - mindBonus);
 
 /** Discipline: total EXP to hold degree D = 50 × (1+2+…+D). */
 export function disciplineCost(degree) {

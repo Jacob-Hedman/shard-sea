@@ -27,6 +27,14 @@ const DB_PATH = DB_CANDIDATES.find((p) => existsSync(p)) ?? DB_CANDIDATES[DB_CAN
 const SRC_DATA = resolve(SITE, 'src', 'data');
 const PUB_DATA = resolve(SITE, 'public', 'data');
 
+// Canonical ability-threshold feats unlock at Base Ability 6/12/18 (PHB
+// "Ability Thresholds and Bonuses"); the value isn't in a parsed column so map by name.
+const THRESHOLD_AT = {
+  'Power Attack': 6, 'Greater Resistance': 12, 'Indomitable': 18,
+  'Wits': 6, 'Cunning': 12, 'Prediction': 18,
+  'Unnatural Agility': 6, 'Dodge': 12, 'The Apex of Motion': 18,
+};
+
 // ---------------------------------------------------------------- helpers
 const db = new DatabaseSync(DB_PATH, { readOnly: true });
 const q = (sql, ...p) => db.prepare(sql).all(...p);
@@ -143,20 +151,22 @@ function exportKind(kind, build) {
   const index = [];
   for (const e of rows) {
     const rec = baseRec(e);
-    const { facets = {}, sub = '', desc } = build(rec, e) || {};
+    const { facets = {}, sub = '', desc, index: idxExtra = {} } = build(rec, e) || {};
     // build() may override rec.content_type (e.g. custom artifice items).
     rec.facets = { ...provFacets(SOURCE), content_type: [rec.content_type], ...facets };
     full.push(rec);
     // carry a few item stats into the browse index so the character builder can
     // auto-fill equipment picked from the codex (bulk, accuracy, traits…).
     const stat = {};
-    for (const k of ['bulk', 'accuracy', 'traits', 'durable', 'durability', 'cost', 'weapon_group', 'mode', 'armor_kind', 'category']) {
+    for (const k of ['bulk', 'accuracy', 'traits', 'durable', 'durability', 'cost', 'weapon_group',
+                     'mode', 'armor_kind', 'category', 'movement_penalty', 'rating', 'resources',
+                     'special', 'pattern', 'activation', 'effects']) {
       if (rec[k] != null && rec[k] !== '') stat[k] = rec[k];
     }
     index.push({
       id: e.id, slug: e.slug, name: e.name, kind,
       sub, desc: snippet(desc ?? rec.summary ?? rec.effects),
-      tier: rec.tier ?? null, stat,
+      tier: rec.tier ?? null, stat, ...idxExtra,
       source: SOURCE, content_type: rec.content_type, license: LICENSE, facets: rec.facets,
     });
   }
@@ -203,6 +213,8 @@ exportKind('feat', (rec, e) => {
     facets: { skill: arr(rec.skill), discipline: arr(rec.discipline_name), tier: arr(rec.feat_tier != null ? `Tier ${rec.feat_tier}` : '') },
     sub: [rec.discipline_name, rec.feat_tier != null ? `Tier ${rec.feat_tier}` : ''].filter(Boolean).join(' · '),
     desc: rec.effect || rec.flavor,
+    // carried into the index so a character sheet can show a feat's effect + cost
+    index: { ap: rec.ap || '', qualities: rec.qualities || '', effect: rec.effect || '', discipline: rec.discipline_name || '', discipline_slug: rec.discipline_slug || '', feat_tier: rec.feat_tier ?? null },
   };
 });
 
@@ -237,6 +249,8 @@ exportKind('archetype', (rec, e) => {
     facets: { skill: skills },
     sub: rec.skills,
     desc: rec.feat_effect || rec.quote,
+    // for the character sheet: the granted feat + Panic responses by scale
+    index: { skills: rec.skills || '', feat_name: rec.feat_name || '', feat_effect: rec.feat_effect || '', panic_response: rec.panic_response || '', panic: rec.panic || {} },
   };
 });
 
@@ -380,7 +394,8 @@ const SIMPLE_KINDS = [
     sub: (r) => [r.attrs['Starting Wealth'] && `Wealth ${r.attrs['Starting Wealth']}`, r.attrs['Contact Points'] && `${r.attrs['Contact Points']} contacts`].filter(Boolean).join(' · '),
     promote: ['description'] },
   { kind: 'threshold_feat', facets: (r) => ({ ability: r.group ? [r.group] : [] }),
-    sub: (r) => [r.group, r.attrs.record_type].filter(Boolean).join(' · '), promote: [] },
+    sub: (r) => [r.group, `Threshold ${THRESHOLD_AT[r.name] || '?'}`].filter(Boolean).join(' · '), promote: [],
+    index: (r) => ({ ability: r.group || '', effect: r.effects || '', threshold: THRESHOLD_AT[r.name] || 0 }) },
   { kind: 'damage_type', facets: (r) => ({ category: r.group ? [r.group] : [] }),
     sub: (r) => [r.group, r.attrs['Base Damage'] && `Base ${r.attrs['Base Damage']}`].filter(Boolean).join(' · '),
     promote: ['injuries', 'Base Damage'] },
@@ -407,7 +422,7 @@ const SIMPLE_KINDS = [
 for (const cfg of SIMPLE_KINDS) {
   exportKind(cfg.kind, (rec) => {
     for (const k of cfg.promote) if (rec.attrs[k] !== undefined) rec[k] = rec.attrs[k];
-    return { facets: cfg.facets(rec), sub: cfg.sub(rec), desc: rec.summary || rec.effects };
+    return { facets: cfg.facets(rec), sub: cfg.sub(rec), desc: rec.summary || rec.effects, index: cfg.index ? cfg.index(rec) : {} };
   });
 }
 

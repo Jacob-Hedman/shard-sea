@@ -3,10 +3,10 @@
 // bases + choices, so it always reflects current inputs and current rules.
 import {
   ABILITIES, ABILITY_LABEL, SKILLS, PRINCIPAL_SKILLS, ST_BASE, INJURY_STEPS,
-  MAX_SKILLS, MAX_PRINCIPAL, TIER_COST_CUMULATIVE, CREATION_EXP,
+  MAX_SKILLS, MAX_PRINCIPAL, TIER_COST_CUMULATIVE, CREATION_EXP, AP_PER_TURN, PANIC_POOL,
   abilityBonus, adjustedAbility, disciplineCost, disciplineNextCost,
   disciplineCapPerSkill, disciplineCapTotal, abilityAdvanceCost, foundryRoll,
-  corruptionBand,
+  corruptionBand, reserve as reserveFn, panicPool,
 } from './rules.mjs';
 
 const ex = (value, formula, parts = []) => ({ value, formula, parts });
@@ -33,6 +33,7 @@ export function normalizeCharacter(c = {}) {
     feats: Array.isArray(c.feats) ? c.feats : [],
     items: Array.isArray(c.items) ? c.items : [],
     notes: c.notes || '',
+    noteSections: Array.isArray(c.noteSections) ? c.noteSections : [],
     visibility: c.visibility || 'shared',
     createdAt: c.createdAt || null,
     updatedAt: c.updatedAt || null,
@@ -45,11 +46,16 @@ export function derive(raw) {
   const strain = c.strain;
   const tier = c.tier;
 
+  // --- Reserve & the strain penalty (strain only hurts once it passes Reserve) ---
+  const baseBodyBonus = abilityBonus(c.abilities.body.base + c.abilities.body.bonus);
+  const reserve = reserveFn(tier, baseBodyBonus);
+  const strainPenalty = Math.max(0, strain - reserve.value);
+
   // --- abilities ---
   const ability = {};
   for (const a of ABILITIES) {
     const { base, bonus } = c.abilities[a];
-    const adj = adjustedAbility(base, bonus, strain);
+    const adj = adjustedAbility(base, bonus, strainPenalty);
     ability[a] = {
       key: a, label: ABILITY_LABEL[a], base, bonus,
       adjusted: adj,
@@ -70,6 +76,15 @@ export function derive(raw) {
 
   // --- derived vitals ---
   const movement = ex(R, 'Reflex', [{ label: 'Reflex', value: R }]);
+  const initiative = ex(R, 'Reflex (ties: Body → Mind)', [{ label: 'Reflex', value: R }]);
+  const ap = ex(AP_PER_TURN, 'gained at start of Turn (max 3)');
+  const mindBonus = ability.mind.bonusVal;
+  const panic = {
+    minor: panicPool(PANIC_POOL.minor, mindBonus),
+    moderate: panicPool(PANIC_POOL.moderate, mindBonus),
+    major: panicPool(PANIC_POOL.major, mindBonus),
+    formula: `pool − Mind bonus ${mindBonus} (min 1)`,
+  };
   const dtVal = B + armorDT;
   const dt = ex(dtVal, armorDT ? 'Body + equipped armor DT+' : 'Body',
     [{ label: 'Body', value: B }, ...(armorDT ? [{ label: armorNames || 'Armor', value: armorDT }] : [])]);
@@ -140,10 +155,12 @@ export function derive(raw) {
   if (spentVal > c.expEarned) warnings.push(`EXP overspent by ${spentVal - c.expEarned}.`);
   if (penalty > 0) warnings.push(`Over-encumbered by ${penalty} Bulk (reduces Movement & Initiative).`);
 
+  if (strainPenalty > 0) warnings.push(`Strain ${strain} exceeds Reserve ${reserve.value} — abilities −${strainPenalty}.`);
+
   return {
     char: c, tier,
-    ability, movement, dt, st, scrapes, shakes,
-    maxEnc, carried, penalty,
+    ability, movement, initiative, ap, reserve, strain, strainPenalty,
+    dt, st, scrapes, shakes, maxEnc, carried, penalty, panic,
     corruption: { value: c.corruption, band: corruptionBand(c.corruption) },
     armorDT, skills, disciplines, byKind, exp, warnings,
   };

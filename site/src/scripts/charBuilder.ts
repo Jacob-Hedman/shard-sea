@@ -18,8 +18,15 @@ function newChar() {
     abilityStart: { body: 3, mind: 3, reflex: 3 },
     strain: 0, corruption: 0, expEarned: 500, money: 0,
     skills: [], disciplines: [], feats: [], items: [], notes: '',
+    noteSections: [
+      { title: 'Background & bonds', body: '' },
+      { title: 'Goals', body: '' },
+      { title: 'Combat reminders', body: '' },
+    ],
   };
 }
+
+const NOTE_SUGGESTIONS = ['Background & bonds', 'Goals', 'Combat reminders', 'Contacts & factions', 'Inventory & loot', 'Session log'];
 
 async function loadIndex(kind: string): Promise<any[]> {
   if (refCache[kind]) return refCache[kind];
@@ -141,6 +148,21 @@ function itemsBlock() {
     </div>`;
 }
 
+function notesBlock() {
+  if (!Array.isArray(char.noteSections)) char.noteSections = [];
+  const secs = char.noteSections.map((n: any, i: number) => `
+    <div class="card" style="padding:.7rem .85rem">
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input class="cs-input" data-note-title="${i}" value="${esc(n.title)}" style="font-weight:600;font-size:.85rem;flex:1" list="cs-note-sugg">
+        <button type="button" class="cs-roll-link" data-delnote="${i}" style="color:var(--color-nonogl)">remove</button>
+      </div>
+      <textarea class="cs-input" data-note-body="${i}" rows="3" style="resize:vertical;margin-top:.4rem;font-size:.88rem">${esc(n.body)}</textarea>
+    </div>`).join('') || '<div class="cs-eq"><span class="gov">No sections yet — add one below.</span></div>';
+  return `<datalist id="cs-note-sugg">${NOTE_SUGGESTIONS.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+    <div id="cs-notes" class="cs-cols" style="grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))">${secs}</div>
+    <button type="button" id="cs-addnote" class="cs-copy" style="margin-top:.5rem;background:var(--color-surface-2);color:var(--color-muted)">+ Add note section</button>`;
+}
+
 function render() {
   const d = derive(char);
   mount.innerHTML = `<div class="csheet">
@@ -175,8 +197,8 @@ function render() {
     </div>
     <div class="cs-eyebrow">Equipment — search the codex, items go to the right section</div>
     <div id="cs-items-wrap">${itemsBlock()}</div>
-    <div class="cs-eyebrow">Notes</div>
-    <textarea class="cs-input" data-f="notes" rows="3" style="resize:vertical">${esc(char.notes)}</textarea>
+    <div class="cs-eyebrow">Notes — sectioned, shown on the sheet</div>
+    <div id="cs-notes-wrap">${notesBlock()}</div>
     ${d.warnings.length ? `<div class="cs-warn">⚠ ${d.warnings.map((w: string) => esc(w)).join('<br>')}</div>` : ''}
   </div>`;
   bind();
@@ -201,7 +223,20 @@ function bind() {
   // view link
   const view = document.getElementById('cs-view') as HTMLAnchorElement;
   view.addEventListener('click', async (e) => { e.preventDefault(); await save(); if (id) location.href = `/characters/sheet?c=${id}`; });
-  bindAbilities(); bindSkills(); bindDisc(); bindItems();
+  bindAbilities(); bindSkills(); bindDisc(); bindItems(); bindNotes();
+}
+
+function reRenderNotes() { document.getElementById('cs-notes-wrap')!.innerHTML = notesBlock(); bindNotes(); }
+function bindNotes() {
+  document.querySelectorAll('[data-note-title]').forEach((el) =>
+    el.addEventListener('input', () => { char.noteSections[Number((el as HTMLElement).dataset.noteTitle)].title = (el as HTMLInputElement).value; markDirty(); }));
+  document.querySelectorAll('[data-note-body]').forEach((el) =>
+    el.addEventListener('input', () => { char.noteSections[Number((el as HTMLElement).dataset.noteBody)].body = (el as HTMLTextAreaElement).value; markDirty(); }));
+  document.querySelectorAll('[data-delnote]').forEach((el) =>
+    el.addEventListener('click', () => { char.noteSections.splice(Number((el as HTMLElement).dataset.delnote), 1); markDirty(); reRenderNotes(); }));
+  document.getElementById('cs-addnote')?.addEventListener('click', () => {
+    char.noteSections.push({ title: 'New section', body: '' }); markDirty(); reRenderNotes();
+  });
 }
 
 function bindAbilities() {
@@ -255,8 +290,13 @@ function bindItems() {
     const st = rec.stat || {};
     char.items.push({
       id: crypto.randomUUID(), kind: rec.kind, refSlug: rec.slug, name: rec.name,
-      bulk: Number(st.bulk) || 0, tier: rec.tier ?? null, qty: 1, equipped: false, dtPlus: 0,
-      accuracy: Number(st.accuracy) || 0, traits: st.traits || '', damage: '',
+      bulk: Number(String(st.bulk).replace(/[^\d.-]/g, '')) || 0, tier: rec.tier ?? null, qty: 1,
+      equipped: rec.kind === 'armor', dtPlus: 0,
+      accuracy: Number(String(st.accuracy).replace(/[^\d.-]/g, '')) || 0,
+      traits: st.traits || '', damage: '',
+      durability: st.durability || st.durable || '', notches: 0,
+      movement_penalty: st.movement_penalty || '', rating: st.rating || '',
+      activation: st.activation || '', pattern: st.pattern || '', effects: st.effects || st.special || '',
     });
     markDirty(); reRenderItems();
   });
