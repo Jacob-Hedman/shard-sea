@@ -58,6 +58,23 @@ const compact = (n: number) =>
     }
     <div class="mt-2 space-y-0.5 border-t border-line pt-3">
       <a
+        href="/characters"
+        class:list={[
+          'group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13.5px] transition',
+          currentPath.startsWith('/characters')
+            ? 'bg-gold/10 text-ink'
+            : 'text-muted hover:bg-surface hover:text-ink',
+        ]}
+      >
+        <i
+          class:list={[
+            'ti ti-user-heart text-[15px]',
+            currentPath.startsWith('/characters') ? 'text-gold' : 'text-faint group-hover:text-muted',
+          ]}
+          aria-hidden="true"></i>
+        Characters
+      </a>
+      <a
         href="/changelog"
         class:list={[
           'group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13.5px] transition',

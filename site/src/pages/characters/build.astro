@@ -1,0 +1,16 @@
+---
+import Layout from '../../components/Layout.astro';
+---
+<Layout title="Character builder" description="Build a Shard-sea character.">
+  <div class="mx-auto max-w-6xl">
+    <nav class="mb-3 flex items-center gap-2 text-sm text-faint">
+      <a href="/characters" class="transition hover:text-gold">← All characters</a>
+    </nav>
+    <div id="char-build"><p class="text-muted text-sm">Loading builder…</p></div>
+  </div>
+  <script>
+    import { initBuilder } from '../../scripts/charBuilder';
+    const run = () => { const m = document.getElementById('char-build'); if (m) initBuilder(m); };
+    document.addEventListener('astro:page-load', run);
+  </script>
+</Layout>

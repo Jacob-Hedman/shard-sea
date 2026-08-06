@@ -147,10 +147,16 @@ function exportKind(kind, build) {
     // build() may override rec.content_type (e.g. custom artifice items).
     rec.facets = { ...provFacets(SOURCE), content_type: [rec.content_type], ...facets };
     full.push(rec);
+    // carry a few item stats into the browse index so the character builder can
+    // auto-fill equipment picked from the codex (bulk, accuracy, traits…).
+    const stat = {};
+    for (const k of ['bulk', 'accuracy', 'traits', 'durable', 'durability', 'cost', 'weapon_group', 'mode', 'armor_kind', 'category']) {
+      if (rec[k] != null && rec[k] !== '') stat[k] = rec[k];
+    }
     index.push({
       id: e.id, slug: e.slug, name: e.name, kind,
       sub, desc: snippet(desc ?? rec.summary ?? rec.effects),
-      tier: rec.tier ?? null,
+      tier: rec.tier ?? null, stat,
       source: SOURCE, content_type: rec.content_type, license: LICENSE, facets: rec.facets,
     });
   }

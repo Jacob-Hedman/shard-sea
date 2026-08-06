@@ -1,0 +1,29 @@
+---
+import Layout from '../../components/Layout.astro';
+---
+<Layout title="Character sheet" description="A Shard-sea character sheet.">
+  <div class="mx-auto max-w-6xl">
+    <nav class="mb-3 flex items-center gap-2 text-sm text-faint">
+      <a href="/characters" class="transition hover:text-gold">← All characters</a>
+      <a id="edit-link" href="#" class="ml-auto rounded-md border border-line bg-surface px-2.5 py-1 text-xs text-muted transition hover:border-gold/40 hover:text-gold">Edit</a>
+    </nav>
+    <div id="char-sheet"><p class="text-muted text-sm">Loading…</p></div>
+  </div>
+  <script>
+    import { mountSheet } from '../../scripts/charSheet';
+    async function run() {
+      const mount = document.getElementById('char-sheet');
+      if (!mount) return;
+      const id = new URLSearchParams(location.search).get('c');
+      const edit = document.getElementById('edit-link') as HTMLAnchorElement;
+      if (edit && id) edit.href = `/characters/build?c=${id}`;
+      if (!id) { mount.innerHTML = '<p class="text-nonogl">No character specified.</p>'; return; }
+      try {
+        const char = await (await fetch(`/api/characters/${id}`)).json();
+        if (char.error) { mount.innerHTML = '<p class="text-nonogl">Character not found.</p>'; return; }
+        mountSheet(mount, char);
+      } catch { mount.innerHTML = '<p class="text-nonogl">Could not load this character.</p>'; }
+    }
+    document.addEventListener('astro:page-load', run);
+  </script>
+</Layout>

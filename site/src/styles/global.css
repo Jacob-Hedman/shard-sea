@@ -258,3 +258,130 @@ header.scrolled {
   .card-hover::before { display: none; }
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* ============================================================
+   Character sheet + builder (client-rendered). Self-contained
+   so it never depends on Tailwind scanning dynamic class strings.
+   The transparency primitive is `.cs-f` — every derived value
+   shows its formula underneath.
+   ============================================================ */
+.csheet { --f: var(--color-gold); }
+.cs-f {
+  font-family: var(--font-mono); font-size: 0.72rem; color: #a88a5b;
+  margin-top: 0.2rem; font-variant-numeric: tabular-nums;
+}
+.cs-f b { color: var(--color-gold-strong); font-weight: 500; }
+.cs-f a { color: var(--color-gold); border-bottom: 1px dotted #8a6f45; }
+.cs-num { font-variant-numeric: tabular-nums; }
+
+.cs-eyebrow {
+  font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--color-faint); margin: 1.6rem 0 0.6rem; display: flex; align-items: center; gap: 0.6rem;
+}
+.cs-eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--color-line); }
+
+.cs-abilities { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
+.cs-ab { position: relative; padding: 0.95rem 1.05rem; }
+.cs-ab .lbl { font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-faint); }
+.cs-ab .val { font-size: 2.3rem; line-height: 1; margin-top: 0.15rem; }
+.cs-ab .bonus {
+  position: absolute; top: 0.9rem; right: 1rem; font-family: var(--font-mono); font-size: 0.8rem;
+  color: var(--color-gold); border: 1px solid #8a6f45; border-radius: 7px; padding: 0.08rem 0.4rem;
+  background: color-mix(in oklab, var(--color-gold) 8%, transparent);
+}
+
+.cs-vitals { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.8rem; }
+.cs-vital { padding: 0.85rem 1rem; }
+.cs-vital .lbl { font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-faint); }
+.cs-vital .v { font-size: 1.75rem; line-height: 1.1; margin-top: 0.12rem; }
+.cs-vital .v small { font-size: 0.85rem; color: var(--color-muted); }
+.cs-ladder { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.55rem; }
+.cs-sev { font-family: var(--font-mono); font-size: 0.66rem; padding: 0.1rem 0.4rem; border-radius: 6px;
+  border: 1px solid var(--color-line); color: var(--color-muted); background: var(--color-surface-2); }
+.cs-sev .t { color: var(--color-faint); }
+.cs-sev.moderate { color: var(--color-gold); border-color: #8a6f45; }
+.cs-sev.major { color: var(--color-nonogl); border-color: color-mix(in oklab, var(--color-nonogl) 40%, transparent); }
+.cs-sev.lethal { color: #e0765a; border-color: rgba(181, 87, 47, 0.5); }
+
+.cs-bar { height: 0.5rem; border-radius: 999px; background: var(--color-surface-2); overflow: hidden;
+  margin-top: 0.5rem; border: 1px solid var(--color-line); }
+.cs-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #8a6f45, var(--color-gold)); }
+.cs-bar.over > span { background: linear-gradient(90deg, var(--color-nonogl), #e0765a); }
+
+.cs-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; align-items: start; }
+
+/* skills — each row is a roll trigger */
+.cs-skill { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--color-line); width: 100%; text-align: left;
+  background: none; color: inherit; font: inherit; cursor: pointer; }
+.cs-skill:last-child { border-bottom: 0; }
+.cs-skill:hover { background: var(--color-surface-2); }
+.cs-skill.untrained { opacity: 0.55; }
+.cs-skill .chk { width: 1rem; height: 1rem; border-radius: 4px; border: 1px solid var(--color-line-strong);
+  display: grid; place-items: center; color: var(--color-gold); font-size: 0.7rem; flex-shrink: 0; }
+.cs-skill.trained .chk { background: color-mix(in oklab, var(--color-gold) 15%, transparent); border-color: #8a6f45; }
+.cs-skill .nm { display: flex; align-items: center; gap: 0.5rem; }
+.cs-skill .prin { font-size: 0.56rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-gold);
+  border: 1px solid #8a6f45; border-radius: 4px; padding: 0 0.28rem; }
+.cs-skill .calc { font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-muted); text-align: right;
+  font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 0.45rem; }
+.cs-skill .calc b { color: var(--color-ink); }
+.cs-skill .gov { color: var(--color-faint); font-size: 0.68rem; }
+.cs-skill .die { color: var(--color-faint); font-size: 0.9rem; }
+
+.cs-pill { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-muted); border: 1px solid var(--color-line);
+  border-radius: 6px; padding: 0.08rem 0.4rem; background: var(--color-surface-2); }
+.cs-pill b { color: var(--color-ink); }
+.cs-eq { padding: 0.8rem 0.95rem; border-bottom: 1px solid var(--color-line); }
+.cs-eq:last-child { border-bottom: 0; }
+.cs-eq .et { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.cs-eq .ek { font-size: 0.64rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-faint); }
+.cs-eq .stats { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+.cs-roll-link { color: var(--color-gold); font-size: 0.72rem; cursor: pointer; background: none; border: 0; font-family: inherit; }
+
+/* roll dialog */
+.cs-dialog { border: 0; padding: 0; background: transparent; color: var(--color-ink); max-width: 92vw; }
+.cs-dialog::backdrop { background: rgba(0, 0, 0, 0.66); backdrop-filter: blur(3px); }
+.cs-dialog .box { width: min(92vw, 26rem); background: var(--color-surface); border: 1px solid var(--color-line-strong);
+  border-radius: 14px; padding: 1.1rem 1.25rem 1.25rem; box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.8); }
+.cs-dialog h3 { font-size: 1.15rem; letter-spacing: -0.01em; margin-bottom: 0.15rem; }
+.cs-dialog .sub { font-size: 0.75rem; color: var(--color-faint); margin-bottom: 0.9rem; }
+.cs-bb { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0.5rem 0;
+  padding: 0.5rem 0.7rem; border: 1px solid var(--color-line); border-radius: 9px; background: var(--color-surface-2); }
+.cs-bb .lab { font-size: 0.82rem; }
+.cs-bb .ctrl { display: flex; align-items: center; gap: 0.6rem; }
+.cs-step { width: 1.7rem; height: 1.7rem; border-radius: 7px; border: 1px solid var(--color-line-strong);
+  background: var(--color-surface); color: var(--color-ink); font-size: 1rem; cursor: pointer; line-height: 1; }
+.cs-step:hover { border-color: var(--color-gold); color: var(--color-gold); }
+.cs-count { min-width: 1.2rem; text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.cs-out { margin-top: 0.9rem; }
+.cs-out .code { font-family: var(--font-mono); font-size: 1.05rem; color: var(--color-gold-strong);
+  background: var(--color-base); border: 1px solid var(--color-line); border-radius: 9px; padding: 0.7rem 0.85rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; word-break: break-all; }
+.cs-copy { flex-shrink: 0; font-size: 0.72rem; color: var(--color-base); background: var(--color-gold);
+  border: 0; border-radius: 7px; padding: 0.35rem 0.7rem; cursor: pointer; font-weight: 600; }
+.cs-copy.done { background: var(--color-ogl); }
+
+/* builder form bits */
+.cs-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.cs-field label { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-faint); }
+.cs-input, .cs-select {
+  background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 8px;
+  color: var(--color-ink); padding: 0.45rem 0.6rem; font: inherit; outline: none; width: 100%;
+}
+.cs-input:focus, .cs-select:focus { border-color: var(--color-line-strong); }
+.cs-input.num { font-family: var(--font-mono); text-align: right; }
+.cs-grid { display: grid; gap: 0.7rem; }
+.cs-save { position: sticky; top: 3.5rem; z-index: 10; display: flex; align-items: center; gap: 0.6rem;
+  font-size: 0.78rem; color: var(--color-faint); }
+.cs-save .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--color-faint); }
+.cs-save.saved .dot { background: var(--color-ogl); }
+.cs-save.saving .dot { background: var(--color-gold); }
+.cs-warn { border: 1px solid color-mix(in oklab, var(--color-nonogl) 40%, transparent);
+  background: color-mix(in oklab, var(--color-nonogl) 8%, transparent); color: var(--color-nonogl);
+  border-radius: 9px; padding: 0.6rem 0.8rem; font-size: 0.82rem; margin-top: 0.8rem; }
+
+@media (max-width: 720px) {
+  .cs-abilities { grid-template-columns: 1fr; }
+  .cs-cols { grid-template-columns: 1fr; }
+}

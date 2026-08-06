@@ -1,0 +1,13 @@
+---
+import Layout from '../../components/Layout.astro';
+---
+<Layout title="Characters" description="Your playtest group's character sheets.">
+  <div class="mx-auto max-w-6xl">
+    <div id="char-list"><p class="text-muted text-sm">Loading characters…</p></div>
+  </div>
+  <script>
+    import { initList } from '../../scripts/charList';
+    const run = () => { const m = document.getElementById('char-list'); if (m) initList(m); };
+    document.addEventListener('astro:page-load', run);
+  </script>
+</Layout>

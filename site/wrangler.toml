@@ -1,5 +1,11 @@
 # Cloudflare Pages configuration (direct-upload deploys via `npm run deploy`).
-# The functions/ directory at the repo root provides the edge auth middleware.
+# The functions/ directory provides the edge auth middleware + the character API.
 name = "shard-sea-codex"
 compatibility_date = "2026-07-01"
 pages_build_output_dir = "dist"
+
+# Character storage — a small shared collection of character sheets.
+# The same binding is applied by `wrangler pages deploy` (local + CI).
+[[kv_namespaces]]
+binding = "CHARACTERS"
+id = "5a522698cd6d4afea3b1ce29ede3df39"
