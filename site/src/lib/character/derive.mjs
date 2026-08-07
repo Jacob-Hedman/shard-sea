@@ -28,6 +28,7 @@ export function normalizeCharacter(c = {}) {
     tier: num(c.tier) || 1,
     archetype: c.archetype || null,
     background: c.background || null,
+    portrait: c.portrait || '',
     abilities: { body: mk(ab.body), mind: mk(ab.mind), reflex: mk(ab.reflex) },
     abilityStart: c.abilityStart || null,
     strain: normStrain(c.strain),

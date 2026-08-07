@@ -23,6 +23,7 @@ export function sanitize(input) {
     tier: Math.min(3, Math.max(1, numOr(input.tier, 1))),
     archetype: input.archetype ? String(input.archetype).slice(0, 80) : null,
     background: input.background ? String(input.background).slice(0, 80) : null,
+    portrait: input.portrait ? String(input.portrait).slice(0, 600) : '',
     abilities: { body: ab(a.body), mind: ab(a.mind), reflex: ab(a.reflex) },
     abilityStart: input.abilityStart
       ? { body: numOr(input.abilityStart.body), mind: numOr(input.abilityStart.mind), reflex: numOr(input.abilityStart.reflex) }

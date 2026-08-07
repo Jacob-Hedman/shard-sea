@@ -12,6 +12,8 @@ let char: any;
 let cid: string | null = null;
 let saveTimer: any;
 let ref: { feats: any[]; thresholds: any[]; archetypes: any[]; conditions: any[]; actions: any[] } | null = null;
+let artBox: HTMLDialogElement | null = null;
+let artEdit: HTMLDialogElement | null = null;
 
 const partsStr = (parts: any[]) =>
   parts && parts.length ? ' = ' + parts.map((p) => `${esc(p.label)} <b>${esc(p.value)}</b>`).join(' + ') : '';
@@ -91,9 +93,57 @@ export async function mountSheet(el: HTMLElement, character: any, id?: string) {
   render();
 }
 
+// ---- character art (portrait + lightbox + link editor) -----------------
+function ensureArtDialogs() {
+  if (!artBox) {
+    artBox = document.createElement('dialog');
+    artBox.className = 'cs-art-dialog';
+    artBox.innerHTML = `<img alt="character art"><button class="cs-art-close" type="button" aria-label="close">✕</button>`;
+    document.body.appendChild(artBox);
+    artBox.addEventListener('click', () => artBox!.close());
+  }
+  if (!artEdit) {
+    artEdit = document.createElement('dialog');
+    artEdit.className = 'cs-dialog';
+    artEdit.innerHTML = `<form method="dialog" class="box">
+      <h3>Character art</h3>
+      <div class="sub">Paste an image link — e.g. https://i.imgur.com/0TsESxm.jpg</div>
+      <input class="cs-input" id="cs-art-url" placeholder="https://…" style="width:100%" autocomplete="off">
+      <div style="margin-top:1rem;display:flex;gap:.5rem;justify-content:flex-end">
+        <button type="button" class="cs-copy" id="cs-art-clear" style="background:var(--color-surface-2);color:var(--color-nonogl)">Clear</button>
+        <button class="cs-copy" style="background:var(--color-surface-2);color:var(--color-muted)">Cancel</button>
+        <button type="button" class="cs-copy" id="cs-art-save">Save</button>
+      </div></form>`;
+    document.body.appendChild(artEdit);
+    const doSave = () => { char.portrait = (artEdit!.querySelector('#cs-art-url') as HTMLInputElement).value.trim(); markDirty(); artEdit!.close(); reRender(); };
+    (artEdit.querySelector('#cs-art-save') as HTMLElement).addEventListener('click', doSave);
+    (artEdit.querySelector('#cs-art-clear') as HTMLElement).addEventListener('click', () => { char.portrait = ''; markDirty(); artEdit!.close(); reRender(); });
+    (artEdit.querySelector('#cs-art-url') as HTMLInputElement).addEventListener('keydown', (e: any) => { if (e.key === 'Enter') { e.preventDefault(); doSave(); } });
+  }
+}
+function openArt() { if (!char.portrait) return openArtEdit(); ensureArtDialogs(); (artBox!.querySelector('img') as HTMLImageElement).src = char.portrait; artBox!.showModal(); }
+function openArtEdit() { ensureArtDialogs(); (artEdit!.querySelector('#cs-art-url') as HTMLInputElement).value = char.portrait || ''; artEdit!.showModal(); }
+function bindArt() {
+  mount.querySelectorAll('[data-art-open]').forEach((el) => el.addEventListener('click', openArt));
+  mount.querySelectorAll('[data-art-edit]').forEach((el) => el.addEventListener('click', (e) => { e.stopPropagation(); openArtEdit(); }));
+}
+
 // ---- section builders --------------------------------------------------
+function portraitHtml(c: any) {
+  const url = c.portrait || '';
+  const inner = url
+    ? `<img src="${esc(url)}" alt="${esc(c.name)}" data-art-open onerror="this.closest('.cs-portrait').classList.add('broken')">
+       <div class="cs-art-fallback">image failed<br>tap to fix</div>`
+    : `<div class="cs-art-empty" data-art-edit>＋<br>art</div>`;
+  return `<div class="cs-portrait${url ? '' : ' empty'}">
+    ${inner}
+    ${url ? `<button type="button" class="cs-art-edit-btn" data-art-edit title="Change image link">✎</button>` : ''}
+  </div>`;
+}
+
 function headerHtml(d: any, c: any, arch: any) {
   return `<div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem">
+    ${portraitHtml(c)}
     <div><h1 style="font-size:2rem;letter-spacing:-.02em;line-height:1;background:linear-gradient(120deg,var(--color-ink),var(--color-gold));-webkit-background-clip:text;background-clip:text;color:transparent">${esc(c.name)}</h1>
       <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;align-items:center">
         <span class="cs-pill" style="color:var(--color-gold);border-color:#8a6f45"><b>Tier ${c.tier}</b></span>
@@ -400,6 +450,7 @@ function render() {
 
   bindPlay();
   bindRolls(d);
+  bindArt();
 }
 
 function reRender() { render(); }

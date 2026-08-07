@@ -348,6 +348,29 @@ header.scrolled {
 .cs-step-sm { width: 1.15rem; height: 1.15rem; border-radius: 5px; font-size: 0.75rem; padding: 0; }
 .cs-pill.broken { border-color: color-mix(in oklab, var(--color-nonogl) 55%, transparent); }
 
+/* character art portrait + lightbox */
+.cs-portrait { position: relative; width: 5rem; height: 5rem; flex-shrink: 0; border-radius: 12px;
+  border: 1px solid var(--color-line-strong); background: var(--color-surface-2); overflow: hidden; }
+.cs-portrait img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; display: block; }
+.cs-portrait .cs-art-fallback { display: none; position: absolute; inset: 0; place-items: center; text-align: center;
+  font-size: 0.6rem; color: var(--color-faint); cursor: pointer; }
+.cs-portrait.broken img { display: none; }
+.cs-portrait.broken .cs-art-fallback { display: grid; }
+.cs-art-empty { width: 100%; height: 100%; display: grid; place-items: center; text-align: center; line-height: 1.05;
+  font-size: 0.72rem; color: var(--color-faint); cursor: pointer; border-radius: 12px;
+  border: 1px dashed var(--color-line-strong); }
+.cs-art-empty:hover { color: var(--color-gold); border-color: color-mix(in oklab, var(--color-gold) 40%, transparent); }
+.cs-art-edit-btn { position: absolute; right: 0.2rem; bottom: 0.2rem; width: 1.35rem; height: 1.35rem; border-radius: 6px;
+  border: 1px solid var(--color-line-strong); background: color-mix(in oklab, var(--color-base) 70%, transparent);
+  color: var(--color-muted); font-size: 0.7rem; cursor: pointer; display: grid; place-items: center; }
+.cs-art-edit-btn:hover { color: var(--color-gold); border-color: var(--color-gold); }
+.cs-art-dialog { border: 0; padding: 0; background: transparent; max-width: 96vw; max-height: 96vh; }
+.cs-art-dialog::backdrop { background: rgba(0, 0, 0, 0.82); backdrop-filter: blur(4px); }
+.cs-art-dialog img { max-width: 92vw; max-height: 92vh; border-radius: 12px; display: block; cursor: zoom-out;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.9); }
+.cs-art-close { position: fixed; top: 1rem; right: 1rem; width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  border: 1px solid var(--color-line-strong); background: var(--color-surface); color: var(--color-ink); cursor: pointer; font-size: 1rem; }
+
 /* roll dialog */
 .cs-dialog { border: 0; padding: 0; background: transparent; color: var(--color-ink); max-width: 92vw; }
 .cs-dialog::backdrop { background: rgba(0, 0, 0, 0.66); backdrop-filter: blur(3px); }
