@@ -11,7 +11,7 @@ let mount: HTMLElement;
 let char: any;
 let cid: string | null = null;
 let saveTimer: any;
-let ref: { feats: any[]; thresholds: any[]; archetypes: any[]; conditions: any[] } | null = null;
+let ref: { feats: any[]; thresholds: any[]; archetypes: any[]; conditions: any[]; actions: any[] } | null = null;
 
 const partsStr = (parts: any[]) =>
   parts && parts.length ? ' = ' + parts.map((p) => `${esc(p.label)} <b>${esc(p.value)}</b>`).join(' + ') : '';
@@ -24,10 +24,10 @@ const isXCondition = (c: any) => /_x\b/i.test(c.name || '') || /-x$/.test(c.slug
 
 async function loadRef() {
   if (ref) return ref;
-  const [feats, thresholds, archetypes, conditions] = await Promise.all(
-    ['feat', 'threshold_feat', 'archetype', 'condition'].map((k) => fetch(`/data/${k}.index.json`).then((r) => r.json()).catch(() => [])),
+  const [feats, thresholds, archetypes, conditions, actions] = await Promise.all(
+    ['feat', 'threshold_feat', 'archetype', 'condition', 'action'].map((k) => fetch(`/data/${k}.index.json`).then((r) => r.json()).catch(() => [])),
   );
-  ref = { feats, thresholds, archetypes, conditions };
+  ref = { feats, thresholds, archetypes, conditions, actions };
   return ref;
 }
 
@@ -148,7 +148,14 @@ function playHtml(d: any) {
       <span class="cs-num" style="font-size:1.7rem;font-family:var(--font-mono);color:${d.strainPenalty ? 'var(--color-nonogl)' : 'inherit'}">${d.strain}</span>
       <span class="cs-f" style="margin:0">/ ${d.reserve.value} = ${esc(d.reserve.formula)}</span></div>
     <div class="cs-f" style="color:${d.strainPenalty ? 'var(--color-nonogl)' : 'var(--color-faint)'}">${d.strainPenalty ? `over by <b>${d.strainPenalty}</b> → all abilities &amp; derived stats −${d.strainPenalty}` : 'within Reserve — no penalty'}</div>
-    ${STRAIN_TYPES.map(trackRow).join('')}</div>`;
+    ${STRAIN_TYPES.map(trackRow).join('')}
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.55rem;align-items:center">
+      <button type="button" class="cs-copy" data-rest="breath" style="background:var(--color-surface-2);color:var(--color-muted)" title="Shed all Standard strain (10 min inactivity)">Catch breath</button>
+      <button type="button" class="cs-copy" data-rest="w1" style="background:var(--color-surface-2);color:var(--color-muted)" title="One Watch: shed all Standard, Persistent −Tier">Rest 1w</button>
+      <button type="button" class="cs-copy" data-rest="w2" style="background:var(--color-surface-2);color:var(--color-muted)" title="Two Watches: shed all Standard, half Persistent">2w</button>
+      <button type="button" class="cs-copy" data-rest="w3" style="background:var(--color-surface-2);color:var(--color-muted)" title="Three Watches: shed all Standard & Persistent">3w</button>
+      <span class="cs-f" style="margin:0 0 0 auto">Permanent strain needs healing, not rest</span>
+    </div></div>`;
 
   // --- corruption ---
   const cband = d.corruption.band;
@@ -232,6 +239,22 @@ function vitalsHtml(d: any) {
     <div class="cs-vital card"><div class="lbl">Max Encumbrance</div><div class="v cs-num">${d.maxEnc.value} <small class="cs-num">· ${d.carried} carried</small></div>${fLine(d.maxEnc)}
       <div class="cs-bar ${d.penalty ? 'over' : ''}"><span style="width:${encPct}%"></span></div>
       ${d.penalty ? `<div class="cs-f" style="color:var(--color-nonogl)">over by <b>${d.penalty}</b> Bulk — Movement &amp; Initiative −${d.penalty}</div>` : ''}</div>`;
+}
+
+function actionsHtml(r: any) {
+  const order = ['Movement', 'Primary', 'General', 'Reactions'];
+  const groups: Record<string, any[]> = {};
+  for (const a of (r.actions || [])) { const t = (a.facets?.action_type || [])[0] || 'Other'; (groups[t] ??= []).push(a); }
+  const apOf = (sub: string) => { const m = /AP\s*(\S+)/.exec(sub || ''); return m ? m[1] : '—'; };
+  const sections = order.filter((t) => groups[t]).map((t) => `
+    <div style="margin-top:.5rem"><div class="lbl" style="font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--color-faint);margin-bottom:.3rem">${t}</div>
+    <div style="display:grid;gap:.3rem">${groups[t].map((a: any) => `
+      <div style="display:flex;gap:.5rem;align-items:baseline">
+        <span class="cs-pill" style="min-width:2.6rem;text-align:center;flex-shrink:0">AP ${esc(apOf(a.sub))}</span>
+        <div><b style="font-size:.85rem">${esc(a.name)}</b> <span class="cs-f" style="display:inline">${esc(a.stat?.effects || a.desc || '')}</span></div>
+      </div>`).join('')}</div></div>`).join('');
+  if (!sections) return '';
+  return `<details class="card" style="padding:.7rem .95rem"><summary style="cursor:pointer;font-size:.82rem;color:var(--color-muted)">Actions &amp; AP — combat quick reference (${(r.actions || []).length}) · 3 AP per turn</summary>${sections}</details>`;
 }
 
 function skillsHtml(d: any) {
@@ -361,6 +384,7 @@ function render() {
     <div class="cs-eyebrow">Abilities</div><div class="cs-abilities">${abilitiesHtml(d)}</div>
     <div class="cs-eyebrow">Combat &amp; vitals — derived</div>
     <div class="cs-vitals" style="grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))">${vitalsHtml(d)}</div>
+    <div style="margin-top:.8rem">${actionsHtml(r)}</div>
     <div class="cs-cols">
       <div><div class="cs-eyebrow">Skills — click to roll</div><div class="card">${skillsHtml(d)}</div>
         ${thr.length ? `<div class="cs-eyebrow">Threshold feats — automatic</div><div class="card" style="padding:.8rem .95rem">${thr.join('')}</div>` : ''}
@@ -390,6 +414,17 @@ function bindPlay() {
   // strain (three types)
   mount.querySelectorAll('[data-strain]').forEach((el) =>
     el.addEventListener('click', () => { const k = (el as HTMLElement).dataset.strain!; char.strain[k] = Math.max(0, (Number(char.strain[k]) || 0) + Number((el as HTMLElement).dataset.d)); markDirty(); reRender(); }));
+  // rest / catch breath — sheds Standard & Persistent per PHB d_Rest (Permanent needs healing)
+  mount.querySelectorAll('[data-rest]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const mode = (el as HTMLElement).dataset.rest!;
+      const P = Number(char.strain.persistent) || 0;
+      char.strain.standard = 0;
+      if (mode === 'w1') char.strain.persistent = Math.max(0, P - (Number(char.tier) || 1));
+      else if (mode === 'w2') char.strain.persistent = Math.floor(P / 2);
+      else if (mode === 'w3') char.strain.persistent = 0;
+      markDirty(); reRender();
+    }));
   // ability temp
   mount.querySelectorAll('[data-atemp]').forEach((el) =>
     el.addEventListener('click', () => { const k = (el as HTMLElement).dataset.atemp!; char.abilities[k].temp = (Number(char.abilities[k].temp) || 0) + Number((el as HTMLElement).dataset.d); markDirty(); reRender(); }));
@@ -431,12 +466,12 @@ function bindRolls(d: any) {
   mount.querySelectorAll('[data-roll="skill"]').forEach((el) =>
     el.addEventListener('click', () => {
       const s = d.skills[Number((el as HTMLElement).dataset.i)];
-      openRoll({ label: s.name, mod: s.mod.value, note: s.trained ? `Tier ${d.tier} + ${abLabel(s)} bonus ${s.abilityBonus}` : `untrained · ${abLabel(s)} bonus ${s.abilityBonus}` });
+      openRoll({ label: s.name, mod: s.mod.value, tier: d.tier, note: s.trained ? `Tier ${d.tier} + ${abLabel(s)} bonus ${s.abilityBonus}` : `untrained · ${abLabel(s)} bonus ${s.abilityBonus}` });
     }));
   mount.querySelectorAll('[data-roll="ability"]').forEach((el) =>
     el.addEventListener('click', () => {
       const a = d.ability[(el as HTMLElement).dataset.a!];
-      openRoll({ label: `${a.label} check`, mod: a.bonusVal, note: `${a.label} bonus ${a.bonusVal}${a.temp ? ` (incl. temp ${a.temp >= 0 ? '+' : ''}${a.temp})` : ''}` });
+      openRoll({ label: `${a.label} check`, mod: a.bonusVal, tier: d.tier, note: `${a.label} bonus ${a.bonusVal}${a.temp ? ` (incl. temp ${a.temp >= 0 ? '+' : ''}${a.temp})` : ''}` });
     }));
   const best = bestCombatMod(d);
   mount.querySelectorAll('[data-roll="weapon"]').forEach((el) =>
@@ -444,7 +479,7 @@ function bindRolls(d: any) {
       const it = (d.byKind.weapon || []).find((w: any) => w.id === (el as HTMLElement).dataset.id);
       const acc = Number(it?.accuracy || 0);
       const skillMod = best ? best.mod.value : 0;
-      openRoll({ label: `Attack — ${it?.name || 'Weapon'}`, mod: skillMod + acc,
+      openRoll({ label: `Attack — ${it?.name || 'Weapon'}`, mod: skillMod + acc, tier: d.tier,
         note: `${best ? best.name + ' ' + (best.mod.value >= 0 ? '+' : '') + best.mod.value : 'no combat skill'}${acc ? ` + accuracy ${acc >= 0 ? '+' : ''}${acc}` : ''}` });
     }));
 }

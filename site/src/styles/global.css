@@ -370,6 +370,10 @@ header.scrolled {
 .cs-copy { flex-shrink: 0; font-size: 0.72rem; color: var(--color-base); background: var(--color-gold);
   border: 0; border-radius: 7px; padding: 0.35rem 0.7rem; cursor: pointer; font-weight: 600; }
 .cs-copy.done { background: var(--color-ogl); }
+.rd-odds { margin-top: 0.6rem; border-top: 1px solid var(--color-line); padding-top: 0.5rem; }
+.rd-odds-grid { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.8rem; font-family: var(--font-mono);
+  font-size: 0.72rem; color: var(--color-muted); }
+.rd-odds-grid b { color: var(--color-gold-strong); font-weight: 600; }
 
 /* builder form bits */
 .cs-field { display: flex; flex-direction: column; gap: 0.3rem; }
