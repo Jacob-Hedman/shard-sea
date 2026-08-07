@@ -46,12 +46,14 @@ export async function mountSheet(mount: HTMLElement, char: any) {
   const d = derive(char);
   const c = d.char;
 
-  // ---- abilities ----
+  // ---- abilities (click for a raw ability check) ----
   const abilities = ['body', 'mind', 'reflex'].map((k) => {
     const a = d.ability[k];
     return `<div class="cs-ab card"><div class="lbl">${a.label}</div>
       <div class="val cs-num">${a.adjusted.value}</div><div class="bonus">+${a.bonusVal}</div>
-      ${fLine(a.adjusted)}<div class="cs-f">bonus <b>+${a.bonusVal}</b> = ⌊${a.adjusted.value} ÷ 6⌋</div></div>`;
+      ${a.temp ? `<div style="margin-top:.3rem"><span class="cs-pill" style="color:var(--color-gold-strong);border-color:#8a6f45">temp ${a.temp >= 0 ? '+' : ''}${a.temp}</span></div>` : ''}
+      ${fLine(a.adjusted)}<div class="cs-f">bonus <b>+${a.bonusVal}</b> = ⌊${a.adjusted.value} ÷ 6⌋</div>
+      <button class="cs-roll-link" data-roll="ability" data-a="${k}" style="margin-top:.4rem">⚄ ${a.label} check</button></div>`;
   }).join('');
 
   const ladder = (steps: any[]) => steps.map((s) =>
@@ -65,7 +67,9 @@ export async function mountSheet(mount: HTMLElement, char: any) {
     ${mini('Movement', `${d.movement.value} m`, d.movement)}
     ${mini('Initiative', d.initiative.value, d.initiative)}
     ${mini('AP / turn', d.ap.value, d.ap)}
-    ${mini('Reserve', d.reserve.value, d.reserve)}
+    <div class="cs-vital card"><div class="lbl">Strain / Reserve</div>
+      <div class="v cs-num">${d.strain} <small>/ ${d.reserve.value}</small></div>${fLine(d.reserve)}
+      ${d.strainPenalty ? `<div class="cs-f" style="color:var(--color-nonogl)">over by <b>${d.strainPenalty}</b> → all abilities −${d.strainPenalty}</div>` : `<div class="cs-f">within Reserve — no ability penalty</div>`}</div>
     <div class="cs-vital card"><div class="lbl">Damage Threshold</div><div class="v cs-num">${d.dt.value}</div>${fLine(d.dt)}
       <div class="cs-ladder">${ladder(d.scrapes)}</div></div>
     <div class="cs-vital card"><div class="lbl">Strain Threshold</div><div class="v cs-num">${d.st.value}</div>${fLine(d.st)}
@@ -161,6 +165,25 @@ export async function mountSheet(mount: HTMLElement, char: any) {
 
   const warnings = d.warnings.length ? `<div class="cs-warn">⚠ ${d.warnings.map((w: string) => esc(w)).join('<br>')}</div>` : '';
 
+  // ---- experience (earned, rules spend, manual XP log → available) ----
+  const xpLine = (label: string, amount: number) =>
+    `<div style="display:flex;gap:.6rem;font-size:.82rem"><span style="flex:1;color:var(--color-muted)">${esc(label || '—')}</span>
+      <span class="cs-num" style="font-family:var(--font-mono);color:${amount < 0 ? 'var(--color-ogl)' : 'var(--color-ink)'}">${amount >= 0 ? '−' : '+'}${Math.abs(amount)}</span></div>`;
+  const xpLedger = `<div class="card" style="padding:.9rem 1.05rem">
+    <div style="display:flex;gap:1.6rem;flex-wrap:wrap;align-items:flex-end">
+      <div><div class="cs-num" style="font-family:var(--font-mono);font-size:1.4rem">${d.exp.earned}</div><div class="cs-f" style="margin:0">Earned</div></div>
+      <div><div class="cs-num" style="font-family:var(--font-mono);font-size:1.4rem">${d.exp.spent.value}</div><div class="cs-f" style="margin:0">Spent</div></div>
+      <div><div class="cs-num" style="font-family:var(--font-mono);font-size:1.4rem;color:${d.exp.remaining < 0 ? 'var(--color-nonogl)' : 'var(--color-gold-strong)'}">${d.exp.remaining}</div><div class="cs-f" style="margin:0">Available</div></div>
+    </div>
+    <div style="margin-top:.55rem;display:grid;gap:.25rem">
+      ${d.exp.breakdown.abilities.value ? xpLine('Abilities', d.exp.breakdown.abilities.value) : ''}
+      ${d.exp.breakdown.disciplines.value ? xpLine('Disciplines', d.exp.breakdown.disciplines.value) : ''}
+      ${d.exp.breakdown.tier.value ? xpLine('Tier', d.exp.breakdown.tier.value) : ''}
+      ${d.exp.ledger.map((e: any) => xpLine(e.label, e.amount)).join('')}
+    </div>
+    <div class="cs-f" style="margin-top:.4rem">Available = ${d.exp.earned} earned − ${d.exp.spent.value} spent</div>
+  </div>`;
+
   mount.innerHTML = `<div class="csheet">
     <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:1rem">
       <div><h1 style="font-size:2rem;letter-spacing:-.02em;line-height:1;background:linear-gradient(120deg,var(--color-ink),var(--color-gold));-webkit-background-clip:text;background-clip:text;color:transparent">${esc(c.name)}</h1>
@@ -186,6 +209,7 @@ export async function mountSheet(mount: HTMLElement, char: any) {
       </div>
     </div>
     <div class="cs-eyebrow">Equipment</div><div class="card">${equip || '<div class="cs-eq"><span class="gov" style="color:var(--color-faint)">No equipment yet.</span></div>'}</div>
+    <div class="cs-eyebrow">Experience</div>${xpLedger}
     ${notes ? `<div class="cs-eyebrow">Notes</div>${notes}` : ''}
   </div>`;
 
@@ -194,6 +218,11 @@ export async function mountSheet(mount: HTMLElement, char: any) {
     el.addEventListener('click', () => {
       const s = d.skills[Number((el as HTMLElement).dataset.i)];
       openRoll({ label: s.name, mod: s.mod.value, note: s.trained ? `Tier ${d.tier} + ${abLabel(s)} bonus ${s.abilityBonus}` : `untrained · ${abLabel(s)} bonus ${s.abilityBonus}` });
+    }));
+  mount.querySelectorAll('[data-roll="ability"]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const a = d.ability[(el as HTMLElement).dataset.a!];
+      openRoll({ label: `${a.label} check`, mod: a.bonusVal, note: `${a.label} bonus ${a.bonusVal}${a.temp ? ` (incl. temp ${a.temp >= 0 ? '+' : ''}${a.temp})` : ''}` });
     }));
   const best = bestCombatMod(d);
   mount.querySelectorAll('[data-roll="weapon"]').forEach((el) =>

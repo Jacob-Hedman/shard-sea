@@ -14,10 +14,11 @@ const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'consumable', 'material'];
 function newChar() {
   return {
     name: 'New Character', tier: 1, archetype: null, background: null,
-    abilities: { body: { base: 3, bonus: 0 }, mind: { base: 3, bonus: 0 }, reflex: { base: 3, bonus: 0 } },
+    abilities: { body: { base: 3, bonus: 0, temp: 0 }, mind: { base: 3, bonus: 0, temp: 0 }, reflex: { base: 3, bonus: 0, temp: 0 } },
     abilityStart: { body: 3, mind: 3, reflex: 3 },
     strain: 0, corruption: 0, expEarned: 500, money: 0,
     skills: [], disciplines: [], feats: [], items: [], notes: '',
+    expLedger: [],
     noteSections: [
       { title: 'Background & bonds', body: '' },
       { title: 'Goals', body: '' },
@@ -68,6 +69,9 @@ export async function initBuilder(el: HTMLElement) {
   if (id) {
     char = await api.get(id);
     if (char.error) { mount.innerHTML = `<p class="cs-warn">Character not found.</p>`; return; }
+    // fill fields that older documents may lack, so every control has state
+    for (const k of ['body', 'mind', 'reflex']) { char.abilities[k] = char.abilities[k] || { base: 0, bonus: 0, temp: 0 }; if (char.abilities[k].temp == null) char.abilities[k].temp = 0; }
+    if (!Array.isArray(char.expLedger)) char.expLedger = [];
   } else {
     char = newChar();
   }
@@ -79,18 +83,62 @@ function abilityRow(k: string) {
   const d = derive(char);
   const dv = d.ability[k];
   const label = k[0].toUpperCase() + k.slice(1);
+  const temp = a.temp || 0;
+  const pen = d.strainPenalty;
   return `<div class="card" style="padding:.8rem .95rem">
     <div style="display:flex;align-items:baseline;gap:.6rem">
       <div class="lbl" style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-faint);width:4rem">${label}</div>
       <div class="cs-num" style="font-family:var(--font-mono);font-size:1.6rem">${dv.adjusted.value}</div>
       <span class="cs-pill" style="color:var(--color-gold)">bonus +${dv.bonusVal}</span>
+      ${temp ? `<span class="cs-pill" style="color:var(--color-gold-strong);border-color:#8a6f45">temp ${temp >= 0 ? '+' : ''}${temp}</span>` : ''}
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:.5rem">
       <div class="cs-field"><label>Base</label><input class="cs-input num" type="number" data-ab="${k}" data-p="base" value="${a.base}"></div>
-      <div class="cs-field"><label>Bonus</label><input class="cs-input num" type="number" data-ab="${k}" data-p="bonus" value="${a.bonus}"></div>
+      <div class="cs-field"><label>Perm. bonus</label><input class="cs-input num" type="number" data-ab="${k}" data-p="bonus" value="${a.bonus}"></div>
       <div class="cs-field"><label>Start</label><input class="cs-input num" type="number" data-abstart="${k}" value="${char.abilityStart?.[k] ?? a.base}"></div>
     </div>
-    <div class="cs-f">= ${a.base} base − ${char.strain} strain + ${a.bonus} bonus · bonus ⌊${dv.adjusted.value} ÷ 6⌋</div>
+    <div style="display:flex;align-items:center;gap:.5rem;margin-top:.55rem">
+      <span class="lbl" style="font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--color-gold)">Temp</span>
+      <button type="button" class="cs-step" data-temp="${k}" data-d="-1">−</button>
+      <span class="cs-count">${temp >= 0 ? '+' : ''}${temp}</span>
+      <button type="button" class="cs-step" data-temp="${k}" data-d="1">+</button>
+      ${temp ? `<button type="button" class="cs-roll-link" data-tempclear="${k}">clear</button>` : ''}
+      <span class="cs-f" style="margin:0 0 0 auto">spells &amp; items — kept off your real score</span>
+    </div>
+    <div class="cs-f">= ${a.base} base ${a.bonus ? `+ ${a.bonus} bonus ` : ''}${temp ? `+ ${temp} temp ` : ''}${pen ? `− ${pen} strain ` : ''}· bonus ⌊${dv.adjusted.value} ÷ 6⌋ = +${dv.bonusVal}</div>
+  </div>`;
+}
+
+// ---- conditions (strain & corruption) with the live effect on your stats ----
+function strainCalcHtml(d: any) {
+  const pen = d.strainPenalty;
+  return `<div class="cs-f">Reserve <b>${d.reserve.value}</b> = ${esc(d.reserve.formula)} — strain only bites once it passes Reserve.</div>
+    <div class="cs-f" style="color:${pen ? 'var(--color-nonogl)' : 'var(--color-faint)'}">${pen ? `over Reserve by <b>${pen}</b> → every ability −${pen}` : 'within Reserve — no ability penalty'}</div>
+    ${pen ? `<div class="cs-ladder" style="margin-top:.35rem">${['body', 'mind', 'reflex'].map((a) => `<span class="cs-sev major">${a[0].toUpperCase() + a.slice(1)} ${d.ability[a].adjusted.value} <span class="t">−${pen}</span></span>`).join('')}</div>` : ''}`;
+}
+function corrCalcHtml(d: any) {
+  const band = d.corruption.band;
+  const chip = (k: string) => `<span class="cs-sev ${band === k ? (k === 'Morbid' ? 'major' : 'moderate') : ''}">${k}</span>`;
+  return `<div class="cs-f">Scale <b>${esc(band)}</b> · Clear 0–5 · Dark 6–11 · Morbid 12–17</div>
+    <div class="cs-ladder" style="margin-top:.35rem">${chip('Clear')}${chip('Dark')}${chip('Morbid')}</div>
+    <div class="cs-f">Panic pool grows with Corruption; your archetype's Panic response reads off this scale.</div>`;
+}
+function conditionsBlock() {
+  const d = derive(char);
+  const stepper = (cond: string, valId: string) => `
+    <button type="button" class="cs-step" data-cond="${cond}" data-d="-1">−</button>
+    <span class="cs-num" id="${valId}" style="font-size:1.5rem;min-width:1.6rem;text-align:center;font-family:var(--font-mono)">${char[cond]}</span>
+    <button type="button" class="cs-step" data-cond="${cond}" data-d="1">+</button>
+    <input class="cs-input num" type="number" data-cond-input="${cond}" value="${char[cond]}" style="width:4rem;margin-left:auto">`;
+  return `<div class="cs-grid" style="grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))">
+    <div class="card" style="padding:.9rem 1rem">
+      <div style="display:flex;align-items:center;gap:.5rem"><div class="lbl" style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-faint)">Strain</div>${stepper('strain', 'cs-strain-val')}</div>
+      <div id="cs-cond-strain" style="margin-top:.4rem">${strainCalcHtml(d)}</div>
+    </div>
+    <div class="card" style="padding:.9rem 1rem">
+      <div style="display:flex;align-items:center;gap:.5rem"><div class="lbl" style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-faint)">Corruption</div>${stepper('corruption', 'cs-corr-val')}</div>
+      <div id="cs-cond-corr" style="margin-top:.4rem">${corrCalcHtml(d)}</div>
+    </div>
   </div>`;
 }
 
@@ -129,22 +177,55 @@ function disciplinesBlock() {
     </div>`;
 }
 
+// ---- experience: earned, auto rules-spend, and a manual XP log that moves Available ----
+function xpFormulaHtml(d: any) {
+  return `Rules spend <b>${d.exp.rules.value}</b> = abilities ${d.exp.breakdown.abilities.value} + disciplines ${d.exp.breakdown.disciplines.value} + tier ${d.exp.breakdown.tier.value}. Logged <b>${d.exp.ledgerSpent.value}</b>. Available = ${char.expEarned} − ${d.exp.rules.value} − ${d.exp.ledgerSpent.value}.`;
+}
+function xpRowsHtml() {
+  return (char.expLedger || []).map((e: any, i: number) => `
+    <div style="display:flex;gap:.4rem;align-items:center;padding:.3rem 0">
+      <input class="cs-input" data-xp-label="${i}" value="${esc(e.label)}" placeholder="What you spent XP on…" style="flex:1;min-width:7rem">
+      <input class="cs-input num" data-xp-amt="${i}" type="number" value="${e.amount}" title="XP spent (use a negative number for an award)" style="width:5.5rem">
+      <button type="button" class="cs-roll-link" data-delxp="${i}" style="color:var(--color-nonogl)">✕</button>
+    </div>`).join('') || '<div class="cs-f" style="color:var(--color-faint)">No entries yet — log feats, gear bought with XP, or GM awards (negative amount = award).</div>';
+}
+function xpBlock() {
+  const d = derive(char);
+  const av = d.exp.remaining;
+  return `<div class="card" style="padding:1rem 1.1rem">
+    <div style="display:flex;gap:1.4rem;flex-wrap:wrap;align-items:flex-end">
+      <div class="cs-field" style="width:7rem"><label>EXP earned</label><input class="cs-input num" type="number" data-xp-earned value="${char.expEarned}"></div>
+      <div><div class="cs-num" id="cs-xp-spent" style="font-family:var(--font-mono);font-size:1.3rem">${d.exp.spent.value}</div><div class="cs-f" style="margin:0">Spent</div></div>
+      <div><div class="cs-num" id="cs-xp-avail" style="font-family:var(--font-mono);font-size:1.3rem;color:${av < 0 ? 'var(--color-nonogl)' : 'var(--color-ogl)'}">${av}</div><div class="cs-f" style="margin:0">Available</div></div>
+    </div>
+    <div class="cs-f" id="cs-xp-formula" style="margin-top:.4rem">${xpFormulaHtml(d)}</div>
+    <div class="cs-eyebrow" style="margin:.8rem 0 .3rem">XP log — feats, gear &amp; GM awards</div>
+    <div id="cs-xp-rows">${xpRowsHtml()}</div>
+    <button type="button" id="cs-addxp" class="cs-copy" style="margin-top:.5rem;background:var(--color-surface-2);color:var(--color-muted)">+ Add XP entry</button>
+  </div>`;
+}
+
 function itemsBlock() {
   const kindLabel: Record<string, string> = { weapon: 'Weapon', armor: 'Armor', artifice: 'Artifice', consumable: 'Consumable', material: 'Material', generic: 'Item' };
   const rows = char.items.map((it: any, i: number) => `
     <div class="cs-eq"><div class="et">
-      <span class="ek">${kindLabel[it.kind] || it.kind}</span><b>${esc(it.name)}</b>
+      <span class="ek">${kindLabel[it.kind] || it.kind}</span>
+      ${it.refSlug ? `<b>${esc(it.name)}</b>` : `<input class="cs-input" data-iname="${i}" value="${esc(it.name)}" style="width:11rem;padding:.15rem .4rem;font-weight:600">`}
       ${it.kind === 'armor' ? `<label class="cs-pill" style="cursor:pointer"><input type="checkbox" data-equip="${i}" ${it.equipped ? 'checked' : ''}> equipped</label>
         <span class="cs-pill">DT+ <input class="cs-input num" style="width:3.2rem;display:inline-block;padding:.1rem .3rem" type="number" data-dtplus="${i}" value="${it.dtPlus || 0}"></span>` : ''}
       <span class="cs-pill">Bulk <input class="cs-input num" style="width:3.5rem;display:inline-block;padding:.1rem .3rem" type="number" data-bulk="${i}" value="${it.bulk || 0}"></span>
+      <span class="cs-pill">Qty <input class="cs-input num" style="width:3rem;display:inline-block;padding:.1rem .3rem" type="number" data-qty="${i}" value="${it.qty || 1}"></span>
       ${it.accuracy ? `<span class="cs-pill">Acc ${it.accuracy >= 0 ? '+' : ''}${it.accuracy}</span>` : ''}
       ${it.traits ? `<span class="cs-pill" style="color:var(--color-muted)">${esc(it.traits)}</span>` : ''}
       <button type="button" class="cs-roll-link" data-delitem="${i}" style="margin-left:auto;color:var(--color-nonogl)">remove</button>
     </div></div>`).join('') || '<div class="cs-eq"><span class="gov">No equipment yet.</span></div>';
   return `<div class="card" id="cs-items">${rows}</div>
-    <div style="position:relative;margin-top:.5rem">
-      <input class="cs-input" id="cs-item-search" placeholder="Search weapons, armor, artifice… and add" autocomplete="off">
-      <div id="cs-item-res" class="card" style="position:absolute;z-index:5;left:0;right:0;margin-top:.25rem;display:none;max-height:18rem;overflow:auto"></div>
+    <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:flex-start">
+      <div style="position:relative;flex:1">
+        <input class="cs-input" id="cs-item-search" placeholder="Search weapons, armor, artifice… and add" autocomplete="off">
+        <div id="cs-item-res" class="card" style="position:absolute;z-index:5;left:0;right:0;margin-top:.25rem;display:none;max-height:18rem;overflow:auto"></div>
+      </div>
+      <button type="button" id="cs-additem" class="cs-copy" style="background:var(--color-surface-2);color:var(--color-muted);white-space:nowrap">+ Custom item</button>
     </div>`;
 }
 
@@ -176,26 +257,21 @@ function render() {
       <div class="cs-field"><label>Tier</label><select class="cs-select" data-f="tier">${[1, 2, 3].map((t) => `<option value="${t}" ${char.tier == t ? 'selected' : ''}>Tier ${t}</option>`).join('')}</select></div>
       <div class="cs-field"><label>Archetype</label><select class="cs-select" data-ref="archetype" data-f="archetype"><option value="">—</option></select></div>
       <div class="cs-field"><label>Background</label><select class="cs-select" data-ref="background" data-f="background"><option value="">—</option></select></div>
-      <div class="cs-field"><label>EXP earned</label><input class="cs-input num" type="number" data-f="expEarned" value="${char.expEarned}"></div>
       <div class="cs-field"><label>Money</label><input class="cs-input num" type="number" data-f="money" value="${char.money}"></div>
-      <div class="cs-field"><label>Strain (live)</label><input class="cs-input num" type="number" data-f="strain" value="${char.strain}"></div>
-      <div class="cs-field"><label>Corruption</label><input class="cs-input num" type="number" data-f="corruption" value="${char.corruption}"></div>
     </div>
-    <div class="cs-eyebrow">Abilities</div>
+    <div class="cs-eyebrow">Abilities — Base is permanent, Temp is spells &amp; items</div>
     <div class="cs-grid" id="cs-abilities" style="grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))">
       ${['body', 'mind', 'reflex'].map(abilityRow).join('')}
     </div>
+    <div class="cs-eyebrow">Conditions — strain &amp; corruption, with live effect on your stats</div>
+    <div id="cs-cond-wrap">${conditionsBlock()}</div>
     <div class="cs-eyebrow">Skills — tick the ones you're trained in</div>
     <div id="cs-skills-wrap">${skillsBlock()}</div>
     <div class="cs-cols">
       <div><div class="cs-eyebrow">Disciplines</div><div id="cs-disc-wrap">${disciplinesBlock()}</div></div>
-      <div><div class="cs-eyebrow">EXP</div><div class="card" style="padding:1rem 1.1rem">
-        <div style="display:flex;gap:1.5rem"><div><div class="cs-num" style="font-family:var(--font-mono);font-size:1.3rem">${d.exp.spent.value}</div><div class="cs-f" style="margin:0">Spent</div></div>
-        <div><div class="cs-num" style="font-family:var(--font-mono);font-size:1.3rem;color:${d.exp.remaining < 0 ? 'var(--color-nonogl)' : 'var(--color-ogl)'}">${d.exp.remaining}</div><div class="cs-f" style="margin:0">Remaining</div></div></div>
-        <div class="cs-f" style="margin-top:.5rem">abilities <b>${d.exp.breakdown.abilities.value}</b> · disciplines <b>${d.exp.breakdown.disciplines.value}</b> · tier <b>${d.exp.breakdown.tier.value}</b></div>
-      </div></div>
+      <div><div class="cs-eyebrow">Experience — earned, spent &amp; your XP log</div><div id="cs-xp-wrap">${xpBlock()}</div></div>
     </div>
-    <div class="cs-eyebrow">Equipment — search the codex, items go to the right section</div>
+    <div class="cs-eyebrow">Equipment — search the codex, items route to the right section</div>
     <div id="cs-items-wrap">${itemsBlock()}</div>
     <div class="cs-eyebrow">Notes — sectioned, shown on the sheet</div>
     <div id="cs-notes-wrap">${notesBlock()}</div>
@@ -206,24 +282,35 @@ function render() {
 }
 
 // ---- events ----
+function reRenderAbilities() { document.getElementById('cs-abilities')!.innerHTML = ['body', 'mind', 'reflex'].map(abilityRow).join(''); bindAbilities(); }
 function reRenderSkills() { document.getElementById('cs-skills-wrap')!.innerHTML = skillsBlock(); bindSkills(); }
 function reRenderDisc() { document.getElementById('cs-disc-wrap')!.innerHTML = disciplinesBlock(); bindDisc(); }
 function reRenderItems() { document.getElementById('cs-items-wrap')!.innerHTML = itemsBlock(); bindItems(); }
+function reRenderConditions() { document.getElementById('cs-cond-wrap')!.innerHTML = conditionsBlock(); bindConditions(); }
+
+/** Update the conditions read-outs in place without replacing their inputs. */
+function syncConditions() {
+  const d = derive(char);
+  const set = (id2: string, html: string) => { const el = document.getElementById(id2); if (el) el.innerHTML = html; };
+  set('cs-strain-val', String(char.strain));
+  set('cs-corr-val', String(char.corruption));
+  set('cs-cond-strain', strainCalcHtml(d));
+  set('cs-cond-corr', corrCalcHtml(d));
+}
 
 function bind() {
-  // scalar fields
+  // scalar identity fields (tier is a select; archetype/background come from ref selects)
   mount.querySelectorAll('[data-f]').forEach((el) =>
     el.addEventListener('input', () => {
       const f = (el as HTMLElement).dataset.f!;
       const v = (el as HTMLInputElement).value;
-      char[f] = ['tier', 'expEarned', 'money', 'strain', 'corruption'].includes(f) ? Number(v) || 0 : (v || (f === 'archetype' || f === 'background' ? null : ''));
+      char[f] = ['tier', 'money'].includes(f) ? Number(v) || 0 : (v || (f === 'archetype' || f === 'background' ? null : ''));
       markDirty();
-      if (['strain', 'tier'].includes(f)) { document.getElementById('cs-abilities')!.innerHTML = ['body', 'mind', 'reflex'].map(abilityRow).join(''); bindAbilities(); reRenderSkills(); }
+      if (f === 'tier') { reRenderAbilities(); reRenderSkills(); syncConditions(); reRenderDisc(); refreshXpTotals(); }
     }));
-  // view link
   const view = document.getElementById('cs-view') as HTMLAnchorElement;
   view.addEventListener('click', async (e) => { e.preventDefault(); await save(); if (id) location.href = `/characters/sheet?c=${id}`; });
-  bindAbilities(); bindSkills(); bindDisc(); bindItems(); bindNotes();
+  bindAbilities(); bindConditions(); bindSkills(); bindDisc(); bindItems(); bindNotes(); bindXp();
 }
 
 function reRenderNotes() { document.getElementById('cs-notes-wrap')!.innerHTML = notesBlock(); bindNotes(); }
@@ -244,16 +331,45 @@ function bindAbilities() {
     el.addEventListener('input', () => {
       const k = (el as HTMLElement).dataset.ab!, p = (el as HTMLElement).dataset.p!;
       char.abilities[k][p] = Number((el as HTMLInputElement).value) || 0;
-      markDirty(); reRenderSkills();
+      markDirty(); reRenderSkills(); syncConditions(); refreshXpTotals();
     }));
   mount.querySelectorAll('[data-abstart]').forEach((el) =>
     el.addEventListener('input', () => {
       const k = (el as HTMLElement).dataset.abstart!;
       char.abilityStart = char.abilityStart || {};
       char.abilityStart[k] = Number((el as HTMLInputElement).value) || 0;
-      markDirty();
+      markDirty(); refreshXpTotals();
+    }));
+  mount.querySelectorAll('[data-temp]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const k = (el as HTMLElement).dataset.temp!, dlt = Number((el as HTMLElement).dataset.d);
+      char.abilities[k].temp = (Number(char.abilities[k].temp) || 0) + dlt;
+      markDirty(); reRenderAbilities(); reRenderSkills();
+    }));
+  mount.querySelectorAll('[data-tempclear]').forEach((el) =>
+    el.addEventListener('click', () => {
+      char.abilities[(el as HTMLElement).dataset.tempclear!].temp = 0;
+      markDirty(); reRenderAbilities(); reRenderSkills();
     }));
 }
+
+function bindConditions() {
+  document.querySelectorAll('[data-cond]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const c2 = (el as HTMLElement).dataset.cond!, dlt = Number((el as HTMLElement).dataset.d);
+      char[c2] = Math.max(0, (Number(char[c2]) || 0) + dlt);
+      const inp = document.querySelector(`[data-cond-input="${c2}"]`) as HTMLInputElement | null;
+      if (inp) inp.value = String(char[c2]);
+      markDirty(); syncConditions(); reRenderAbilities(); reRenderSkills();
+    }));
+  document.querySelectorAll('[data-cond-input]').forEach((el) =>
+    el.addEventListener('input', () => {
+      const c2 = (el as HTMLElement).dataset.condInput!;
+      char[c2] = Math.max(0, Number((el as HTMLInputElement).value) || 0);
+      markDirty(); syncConditions(); reRenderAbilities(); reRenderSkills();
+    }));
+}
+
 function bindSkills() {
   document.querySelectorAll('[data-skill]').forEach((el) =>
     el.addEventListener('click', () => {
@@ -263,20 +379,22 @@ function bindSkills() {
       markDirty(); reRenderSkills();
     }));
 }
+
 function bindDisc() {
   document.querySelectorAll('[data-deg]').forEach((el) =>
     el.addEventListener('click', () => {
       const i = Number((el as HTMLElement).dataset.deg), dlt = Number((el as HTMLElement).dataset.d);
       char.disciplines[i].degree = Math.max(1, (char.disciplines[i].degree || 1) + dlt);
-      markDirty(); reRenderDisc();
+      markDirty(); reRenderDisc(); refreshXpTotals();
     }));
   document.querySelectorAll('[data-deldisc]').forEach((el) =>
-    el.addEventListener('click', () => { char.disciplines.splice(Number((el as HTMLElement).dataset.deldisc), 1); markDirty(); reRenderDisc(); }));
+    el.addEventListener('click', () => { char.disciplines.splice(Number((el as HTMLElement).dataset.deldisc), 1); markDirty(); reRenderDisc(); refreshXpTotals(); }));
   wireSearch('cs-disc-search', 'cs-disc-res', ['discipline'], (rec) => {
     char.disciplines.push({ slug: rec.slug, name: rec.name, skill: (rec.facets?.skill || [])[0]?.toLowerCase() || null, degree: 1 });
-    markDirty(); reRenderDisc();
+    markDirty(); reRenderDisc(); refreshXpTotals();
   });
 }
+
 function bindItems() {
   document.querySelectorAll('[data-delitem]').forEach((el) =>
     el.addEventListener('click', () => { char.items.splice(Number((el as HTMLElement).dataset.delitem), 1); markDirty(); reRenderItems(); }));
@@ -286,6 +404,18 @@ function bindItems() {
     el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.dtplus)].dtPlus = Number((el as HTMLInputElement).value) || 0; markDirty(); }));
   document.querySelectorAll('[data-bulk]').forEach((el) =>
     el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.bulk)].bulk = Number((el as HTMLInputElement).value) || 0; markDirty(); }));
+  document.querySelectorAll('[data-qty]').forEach((el) =>
+    el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.qty)].qty = Math.max(1, Number((el as HTMLInputElement).value) || 1); markDirty(); }));
+  document.querySelectorAll('[data-iname]').forEach((el) =>
+    el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.iname)].name = (el as HTMLInputElement).value; markDirty(); }));
+  document.getElementById('cs-additem')?.addEventListener('click', () => {
+    char.items.push({
+      id: crypto.randomUUID(), kind: 'generic', refSlug: null, name: 'New item', bulk: 0, tier: null, qty: 1,
+      equipped: false, dtPlus: 0, accuracy: 0, traits: '', damage: '', durability: '', notches: 0,
+      movement_penalty: '', rating: '', activation: '', pattern: '', effects: '',
+    });
+    markDirty(); reRenderItems();
+  });
   wireSearch('cs-item-search', 'cs-item-res', EQUIP_KINDS, (rec) => {
     const st = rec.stat || {};
     char.items.push({
@@ -300,6 +430,32 @@ function bindItems() {
     });
     markDirty(); reRenderItems();
   });
+}
+
+// ---- XP log wiring ----
+function refreshXpTotals() {
+  const d = derive(char);
+  const spent = document.getElementById('cs-xp-spent'); if (spent) spent.textContent = String(d.exp.spent.value);
+  const avail = document.getElementById('cs-xp-avail');
+  if (avail) { avail.textContent = String(d.exp.remaining); (avail as HTMLElement).style.color = d.exp.remaining < 0 ? 'var(--color-nonogl)' : 'var(--color-ogl)'; }
+  const f = document.getElementById('cs-xp-formula'); if (f) f.innerHTML = xpFormulaHtml(d);
+}
+function reRenderXpRows() { const el = document.getElementById('cs-xp-rows'); if (el) { el.innerHTML = xpRowsHtml(); bindXpRows(); } }
+function bindXpRows() {
+  document.querySelectorAll('[data-xp-label]').forEach((el) =>
+    el.addEventListener('input', () => { char.expLedger[Number((el as HTMLElement).dataset.xpLabel)].label = (el as HTMLInputElement).value; markDirty(); }));
+  document.querySelectorAll('[data-xp-amt]').forEach((el) =>
+    el.addEventListener('input', () => { char.expLedger[Number((el as HTMLElement).dataset.xpAmt)].amount = Number((el as HTMLInputElement).value) || 0; markDirty(); refreshXpTotals(); }));
+  document.querySelectorAll('[data-delxp]').forEach((el) =>
+    el.addEventListener('click', () => { char.expLedger.splice(Number((el as HTMLElement).dataset.delxp), 1); markDirty(); reRenderXpRows(); refreshXpTotals(); }));
+}
+function bindXp() {
+  const earned = document.querySelector('[data-xp-earned]') as HTMLInputElement | null;
+  earned?.addEventListener('input', () => { char.expEarned = Number(earned.value) || 0; markDirty(); refreshXpTotals(); });
+  document.getElementById('cs-addxp')?.addEventListener('click', () => {
+    (char.expLedger = char.expLedger || []).push({ label: '', amount: 0, note: '' }); markDirty(); reRenderXpRows(); refreshXpTotals();
+  });
+  bindXpRows();
 }
 
 // generic codex search-and-pick dropdown

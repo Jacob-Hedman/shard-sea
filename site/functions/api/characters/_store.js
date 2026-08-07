@@ -16,7 +16,7 @@ const arr = (v) => (Array.isArray(v) ? v : []);
 /** Keep only known character fields, coerce types, cap sizes — never trust the body. */
 export function sanitize(input) {
   const a = input.abilities || {};
-  const ab = (x) => ({ base: numOr(x?.base), bonus: numOr(x?.bonus) });
+  const ab = (x) => ({ base: numOr(x?.base), bonus: numOr(x?.bonus), temp: numOr(x?.temp) });
   return {
     id: String(input.id || ''),
     name: String(input.name || 'Unnamed').slice(0, 80),
@@ -66,6 +66,11 @@ export function sanitize(input) {
     noteSections: arr(input.noteSections).slice(0, 20).map((n) => ({
       title: String(n.title || 'Note').slice(0, 60),
       body: String(n.body || '').slice(0, 4000),
+    })),
+    expLedger: arr(input.expLedger).slice(0, 100).map((e) => ({
+      label: String(e.label || '').slice(0, 80),
+      amount: numOr(e.amount),
+      note: e.note ? String(e.note).slice(0, 200) : '',
     })),
     visibility: 'shared',
     createdAt: input.createdAt || null,

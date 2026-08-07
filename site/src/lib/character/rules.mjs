@@ -58,15 +58,23 @@ export function abilityBonus(adjusted) {
   return Math.max(0, Math.floor(adjusted / 6));
 }
 
-/** Adjusted Ability = Base + Bonus − strain penalty (min 0). Strain only bites
- *  once it exceeds your Reserve (PHB a_Health), so `penalty` is that excess. */
-export function adjustedAbility(base, bonus, penalty) {
+/** Adjusted Ability = Base + Permanent bonus + Temp − strain penalty (min 0).
+ *  `temp` is a temporary spell/item swing kept separate from the real score.
+ *  Strain only bites once it exceeds your Reserve (PHB a_Health), so `penalty`
+ *  is that excess. Temp raises everything derived from Adjusted, but by design it
+ *  does NOT unlock Threshold feats or change Reserve — those gate on the real score. */
+export function adjustedAbility(base, bonus, temp, penalty) {
+  const bits = ['Base'];
+  if (bonus) bits.push('Bonus');
+  if (temp) bits.push('Temp');
+  const formula = bits.join(' + ') + (penalty ? ' − strain over Reserve' : '');
   return ex(
-    Math.max(0, base + bonus - penalty),
-    penalty ? 'Base + Bonus − strain over Reserve' : 'Base + Bonus',
+    Math.max(0, base + bonus + temp - penalty),
+    formula,
     [
       { label: 'Base', value: base },
       { label: 'Bonus', value: bonus },
+      { label: 'Temp', value: temp },
       { label: 'strain', value: -penalty },
     ].filter((p) => p.label === 'Base' || p.value !== 0),
   );

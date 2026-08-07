@@ -15,7 +15,7 @@ const num = (v) => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
 /** Fill any missing fields so a partial/old document derives without throwing. */
 export function normalizeCharacter(c = {}) {
   const ab = c.abilities || {};
-  const mk = (a) => ({ base: num(a?.base), bonus: num(a?.bonus) });
+  const mk = (a) => ({ base: num(a?.base), bonus: num(a?.bonus), temp: num(a?.temp) });
   return {
     id: c.id || '',
     name: c.name || 'Unnamed',
@@ -34,6 +34,7 @@ export function normalizeCharacter(c = {}) {
     items: Array.isArray(c.items) ? c.items : [],
     notes: c.notes || '',
     noteSections: Array.isArray(c.noteSections) ? c.noteSections : [],
+    expLedger: Array.isArray(c.expLedger) ? c.expLedger : [],
     visibility: c.visibility || 'shared',
     createdAt: c.createdAt || null,
     updatedAt: c.updatedAt || null,
@@ -54,10 +55,11 @@ export function derive(raw) {
   // --- abilities ---
   const ability = {};
   for (const a of ABILITIES) {
-    const { base, bonus } = c.abilities[a];
-    const adj = adjustedAbility(base, bonus, strainPenalty);
+    const { base, bonus, temp } = c.abilities[a];
+    const adj = adjustedAbility(base, bonus, temp, strainPenalty);
     ability[a] = {
-      key: a, label: ABILITY_LABEL[a], base, bonus,
+      key: a, label: ABILITY_LABEL[a], base, bonus, temp,
+      permanent: base + bonus,              // the "real" score threshold feats gate on
       adjusted: adj,
       bonusVal: abilityBonus(adj.value),
       bonusExplain: ex(`+${abilityBonus(adj.value)}`, `⌊${adj.value} ÷ 6⌋`),
@@ -131,11 +133,21 @@ export function derive(raw) {
   const abilityCostVal = abilityAdvanceCost(advances);
   const disciplineCostVal = disciplines.reduce((s, d) => s + d.cost.value, 0);
   const tierCostVal = TIER_COST_CUMULATIVE[tier] ?? 0;
-  const spentVal = abilityCostVal + disciplineCostVal + tierCostVal;
+  const rulesSpentVal = abilityCostVal + disciplineCostVal + tierCostVal;
+  // Manual XP log: things the rules engine can't auto-price (feats, gear bought with
+  // XP, GM awards). Positive = spent, negative = awarded/refunded. It genuinely moves
+  // your Available XP, and never double-counts the auto-tracked abilities/disciplines/tier.
+  const ledger = c.expLedger.map((e) => ({ label: String(e.label || ''), amount: num(e.amount), note: String(e.note || '') }));
+  const ledgerSpentVal = ledger.reduce((s, e) => s + e.amount, 0);
+  const spentVal = rulesSpentVal + ledgerSpentVal;
   const exp = {
     earned: c.expEarned,
-    spent: ex(spentVal, 'abilities + disciplines + tier',
+    rules: ex(rulesSpentVal, 'abilities + disciplines + tier',
       [{ label: 'abilities', value: abilityCostVal }, { label: 'disciplines', value: disciplineCostVal }, { label: 'tier', value: tierCostVal }]),
+    ledger,
+    ledgerSpent: ex(ledgerSpentVal, 'sum of your XP log'),
+    spent: ex(spentVal, 'rules spend + logged spend',
+      [{ label: 'rules', value: rulesSpentVal }, { label: 'logged', value: ledgerSpentVal }]),
     remaining: c.expEarned - spentVal,
     breakdown: {
       abilities: ex(abilityCostVal, `${advances} advances × 100·Tier (6 per tier)`),
