@@ -2,6 +2,7 @@
 import Layout from '../components/Layout.astro';
 import { loadChanges } from '../lib/data';
 import { hrefFor, labelMap } from '../lib/sections';
+import { siteChangelog } from '../lib/siteChangelog';
 
 const { current, versions, changelog } = loadChanges();
 const HEADING = 'text-[13px] font-semibold uppercase tracking-[0.08em] text-muted';
@@ -14,18 +15,33 @@ function byKind(list: any[]) {
   return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 const kindLabel = (k: string, n: number) => `${labelMap[k] ?? k}${n === 1 ? '' : 's'}`;
+
+const TAG_CLASS: Record<string, string> = {
+  feature: 'border-gold/40 bg-gold/5 text-gold',
+  fix: 'border-nonogl/40 bg-nonogl/5 text-nonogl',
+  content: 'border-ogl/40 bg-ogl/5 text-ogl',
+};
 ---
 
-<Layout title="Changelog" description="Exactly what changed in each version of the Kriegsmesser PHB.">
-  <div class="mx-auto max-w-4xl space-y-10">
+<Layout title="Changelog" description="What changed in each Kriegsmesser PHB version, and every update to this site.">
+  <div class="mx-auto max-w-4xl space-y-8">
     <header>
       <h1 class="text-3xl font-bold tracking-tight text-ink sm:text-4xl">Changelog</h1>
       <p class="mt-2 text-sm text-faint">
-        Every version of the Kriegsmesser PHB, with the exact entries that were added, removed or changed.
-        The site always shows the latest version (<span class="font-mono text-muted">{current}</span>).
+        Two logs: the <span class="text-muted">book</span> — every version of the Kriegsmesser PHB with the exact
+        entries added, removed or changed — and the <span class="text-muted">site</span> — updates to this codex and
+        its tools. The site always shows the latest book version (<span class="font-mono text-muted">{current}</span>).
       </p>
+      <div class="mt-4 flex gap-2" role="tablist">
+        <button class="cl-tab rounded-lg border border-line bg-surface px-3.5 py-1.5 text-sm text-muted transition" data-cl-tab="book" data-active="true">Book versions</button>
+        <button class="cl-tab rounded-lg border border-line bg-surface px-3.5 py-1.5 text-sm text-muted transition" data-cl-tab="site">Site updates</button>
+      </div>
+    </header>
+
+    {/* ---- Book (PHB) versions ---- */}
+    <section id="tab-book" class="space-y-10">
       {versions.length > 1 && (
-        <div class="mt-3 flex flex-wrap gap-1.5">
+        <div class="flex flex-wrap gap-1.5">
           {versions.map((v) => (
             <a href={`#${v.version}`} class="rounded-md border border-line bg-surface px-2 py-0.5 font-mono text-[11px] text-muted transition hover:border-gold/40 hover:text-gold">
               {v.version}
@@ -33,102 +49,148 @@ const kindLabel = (k: string, n: number) => `${labelMap[k] ?? k}${n === 1 ? '' :
           ))}
         </div>
       )}
-    </header>
 
-    {changelog.map((b: any) => {
-      const isBaseline = (b.baseline?.length ?? 0) > 0 && !b.added?.length && !b.removed?.length && !b.modified?.length;
-      const nAdded = b.added?.length ?? 0;
-      const nRemoved = b.removed?.length ?? 0;
-      const nMod = b.modifiedGrouped?.length ?? 0;
-      return (
-        <section id={b.version_to} class="scroll-mt-20">
-          <div class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-2">
-            <h2 class="font-mono text-xl font-bold text-ink">{b.version_to}</h2>
-            {b.imported_at && <span class="font-mono text-xs text-faint">{fmtDate(b.imported_at)}</span>}
-            {!isBaseline && b.version_from && (
-              <span class="text-xs text-faint">compared to <span class="font-mono">{b.version_from}</span></span>
-            )}
-            {!isBaseline && (
-              <div class="ml-auto flex gap-2 font-mono text-[11px]">
-                {nAdded > 0 && <span class="text-ogl">+{nAdded}</span>}
-                {nRemoved > 0 && <span class="text-nonogl">−{nRemoved}</span>}
-                {nMod > 0 && <span class="text-gold">~{nMod}</span>}
+      {changelog.map((b: any) => {
+        const isBaseline = (b.baseline?.length ?? 0) > 0 && !b.added?.length && !b.removed?.length && !b.modified?.length;
+        const nAdded = b.added?.length ?? 0;
+        const nRemoved = b.removed?.length ?? 0;
+        const nMod = b.modifiedGrouped?.length ?? 0;
+        return (
+          <section id={b.version_to} class="scroll-mt-20">
+            <div class="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line pb-2">
+              <h2 class="font-mono text-xl font-bold text-ink">{b.version_to}</h2>
+              {b.imported_at && <span class="font-mono text-xs text-faint">{fmtDate(b.imported_at)}</span>}
+              {!isBaseline && b.version_from && (
+                <span class="text-xs text-faint">compared to <span class="font-mono">{b.version_from}</span></span>
+              )}
+              {!isBaseline && (
+                <div class="ml-auto flex gap-2 font-mono text-[11px]">
+                  {nAdded > 0 && <span class="text-ogl">+{nAdded}</span>}
+                  {nRemoved > 0 && <span class="text-nonogl">−{nRemoved}</span>}
+                  {nMod > 0 && <span class="text-gold">~{nMod}</span>}
+                </div>
+              )}
+            </div>
+
+            {isBaseline ? (
+              <div class="space-y-2">
+                <p class="text-sm text-muted">Initial import. The database was seeded with:</p>
+                <ul class="grid gap-1 sm:grid-cols-2">
+                  {b.baseline.map((c: any) => (
+                    <li class="flex items-center gap-2 text-sm text-muted">
+                      <span class="h-1 w-1 rounded-full bg-gold/60" aria-hidden="true" />{c.summary}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div class="space-y-6">
+                {nAdded > 0 && (
+                  <div>
+                    <h3 class={`${HEADING} mb-2 text-ogl`}>Added — {nAdded}</h3>
+                    {byKind(b.added).map(([k, list]) => (
+                      <div class="mb-2">
+                        <div class="mb-1 text-[11px] uppercase tracking-wide text-faint">{kindLabel(k, list.length)}</div>
+                        <div class="flex flex-wrap gap-1.5">
+                          {list.map((c: any) => (
+                            <a href={hrefFor(c.kind, c.slug)} class="rounded-md border border-ogl/30 bg-ogl/5 px-2 py-0.5 text-xs text-ink transition hover:border-ogl/60">{c.name}</a>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {nRemoved > 0 && (
+                  <div>
+                    <h3 class={`${HEADING} mb-2 text-nonogl`}>Removed — {nRemoved}</h3>
+                    {byKind(b.removed).map(([k, list]) => (
+                      <div class="mb-2">
+                        <div class="mb-1 text-[11px] uppercase tracking-wide text-faint">{kindLabel(k, list.length)}</div>
+                        <div class="flex flex-wrap gap-1.5">
+                          {list.map((c: any) => (
+                            <span class="rounded-md border border-nonogl/30 bg-nonogl/5 px-2 py-0.5 text-xs text-muted line-through">{c.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {nMod > 0 && (
+                  <div>
+                    <h3 class={`${HEADING} mb-2 text-gold`}>Changed — {nMod}</h3>
+                    <ul class="space-y-2.5">
+                      {b.modifiedGrouped.map((m: any) => (
+                        <li class="card p-3.5">
+                          <a href={hrefFor(m.kind, m.slug)} class="font-semibold text-ink hover:text-gold">{m.name}</a>
+                          <span class="ml-2 text-[11px] uppercase tracking-wide text-faint">{labelMap[m.kind] ?? m.kind}</span>
+                          <ul class="mt-1.5 space-y-1">
+                            {m.changes.map((ch: any) => (
+                              <li class="text-sm text-muted">
+                                <span class="font-medium text-ink">{ch.field}:</span>{' '}
+                                {ch.old_value != null && <span class="text-faint line-through">{ch.old_value}</span>}
+                                {ch.old_value != null && ch.new_value != null && <span class="text-faint"> → </span>}
+                                {ch.new_value != null && <span class="text-ink">{ch.new_value}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
+          </section>
+        );
+      })}
+    </section>
+
+    {/* ---- Site updates ---- */}
+    <section id="tab-site" class="hidden space-y-8">
+      {siteChangelog.map((e) => (
+        <section class="scroll-mt-20">
+          <div class="mb-3 flex flex-wrap items-baseline gap-x-3 border-b border-line pb-2">
+            <h2 class="text-xl font-bold text-ink">{e.title}</h2>
+            <span class="font-mono text-xs text-faint">{e.date}</span>
           </div>
-
-          {isBaseline ? (
-            <div class="space-y-2">
-              <p class="text-sm text-muted">Initial import. The database was seeded with:</p>
-              <ul class="grid gap-1 sm:grid-cols-2">
-                {b.baseline.map((c: any) => (
-                  <li class="flex items-center gap-2 text-sm text-muted">
-                    <span class="h-1 w-1 rounded-full bg-gold/60" aria-hidden="true" />{c.summary}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div class="space-y-6">
-              {nAdded > 0 && (
-                <div>
-                  <h3 class={`${HEADING} mb-2 text-ogl`}>Added — {nAdded}</h3>
-                  {byKind(b.added).map(([k, list]) => (
-                    <div class="mb-2">
-                      <div class="mb-1 text-[11px] uppercase tracking-wide text-faint">{kindLabel(k, list.length)}</div>
-                      <div class="flex flex-wrap gap-1.5">
-                        {list.map((c: any) => (
-                          <a href={hrefFor(c.kind, c.slug)} class="rounded-md border border-ogl/30 bg-ogl/5 px-2 py-0.5 text-xs text-ink transition hover:border-ogl/60">{c.name}</a>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {nRemoved > 0 && (
-                <div>
-                  <h3 class={`${HEADING} mb-2 text-nonogl`}>Removed — {nRemoved}</h3>
-                  {byKind(b.removed).map(([k, list]) => (
-                    <div class="mb-2">
-                      <div class="mb-1 text-[11px] uppercase tracking-wide text-faint">{kindLabel(k, list.length)}</div>
-                      <div class="flex flex-wrap gap-1.5">
-                        {list.map((c: any) => (
-                          <span class="rounded-md border border-nonogl/30 bg-nonogl/5 px-2 py-0.5 text-xs text-muted line-through">{c.name}</span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {nMod > 0 && (
-                <div>
-                  <h3 class={`${HEADING} mb-2 text-gold`}>Changed — {nMod}</h3>
-                  <ul class="space-y-2.5">
-                    {b.modifiedGrouped.map((m: any) => (
-                      <li class="card p-3.5">
-                        <a href={hrefFor(m.kind, m.slug)} class="font-semibold text-ink hover:text-gold">{m.name}</a>
-                        <span class="ml-2 text-[11px] uppercase tracking-wide text-faint">{labelMap[m.kind] ?? m.kind}</span>
-                        <ul class="mt-1.5 space-y-1">
-                          {m.changes.map((ch: any) => (
-                            <li class="text-sm text-muted">
-                              <span class="font-medium text-ink">{ch.field}:</span>{' '}
-                              {ch.old_value != null && <span class="text-faint line-through">{ch.old_value}</span>}
-                              {ch.old_value != null && ch.new_value != null && <span class="text-faint"> → </span>}
-                              {ch.new_value != null && <span class="text-ink">{ch.new_value}</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
+          <ul class="space-y-2.5">
+            {e.items.map((it) => (
+              <li class="flex gap-2.5 text-sm text-muted">
+                <span class={`mt-0.5 h-fit shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${TAG_CLASS[it.tag]}`}>{it.tag}</span>
+                <span>{it.text}</span>
+              </li>
+            ))}
+          </ul>
         </section>
-      );
-    })}
+      ))}
+    </section>
   </div>
+
+  <style>
+    .cl-tab[data-active='true'] {
+      color: var(--color-gold);
+      border-color: color-mix(in oklab, var(--color-gold) 40%, transparent);
+      background: color-mix(in oklab, var(--color-gold) 6%, var(--color-surface));
+    }
+  </style>
+  <script>
+    function initChangelogTabs() {
+      const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-cl-tab]'));
+      const panels: Record<string, HTMLElement | null> = {
+        book: document.getElementById('tab-book'),
+        site: document.getElementById('tab-site'),
+      };
+      if (!btns.length) return;
+      const show = (tab: string) => {
+        for (const [k, el] of Object.entries(panels)) el?.classList.toggle('hidden', k !== tab);
+        for (const b of btns) b.setAttribute('data-active', b.dataset.clTab === tab ? 'true' : 'false');
+      };
+      for (const b of btns) b.addEventListener('click', () => show(b.dataset.clTab || 'book'));
+      // Deep links: #site opens the site tab; a version anchor (#v17) opens the book tab.
+      if (location.hash === '#site') show('site');
+    }
+    document.addEventListener('astro:page-load', initChangelogTabs);
+  </script>
 </Layout>
