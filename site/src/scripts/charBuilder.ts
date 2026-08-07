@@ -16,7 +16,8 @@ function newChar() {
     name: 'New Character', tier: 1, archetype: null, background: null,
     abilities: { body: { base: 3, bonus: 0, temp: 0 }, mind: { base: 3, bonus: 0, temp: 0 }, reflex: { base: 3, bonus: 0, temp: 0 } },
     abilityStart: { body: 3, mind: 3, reflex: 3 },
-    strain: 0, corruption: 0, expEarned: 500, money: 0,
+    strain: { standard: 0, persistent: 0, permanent: 0 }, corruption: 0, expEarned: 500, money: 0,
+    conditions: [], injuries: [], damage: 0,
     skills: [], disciplines: [], feats: [], items: [], notes: '',
     expLedger: [],
     noteSections: [
@@ -72,6 +73,10 @@ export async function initBuilder(el: HTMLElement) {
     // fill fields that older documents may lack, so every control has state
     for (const k of ['body', 'mind', 'reflex']) { char.abilities[k] = char.abilities[k] || { base: 0, bonus: 0, temp: 0 }; if (char.abilities[k].temp == null) char.abilities[k].temp = 0; }
     if (!Array.isArray(char.expLedger)) char.expLedger = [];
+    if (!char.strain || typeof char.strain !== 'object') char.strain = { standard: Number(char.strain) || 0, persistent: 0, permanent: 0 };
+    if (!Array.isArray(char.conditions)) char.conditions = [];
+    if (!Array.isArray(char.injuries)) char.injuries = [];
+    if (char.damage == null) char.damage = 0;
   } else {
     char = newChar();
   }
@@ -106,39 +111,6 @@ function abilityRow(k: string) {
       <span class="cs-f" style="margin:0 0 0 auto">spells &amp; items — kept off your real score</span>
     </div>
     <div class="cs-f">= ${a.base} base ${a.bonus ? `+ ${a.bonus} bonus ` : ''}${temp ? `+ ${temp} temp ` : ''}${pen ? `− ${pen} strain ` : ''}· bonus ⌊${dv.adjusted.value} ÷ 6⌋ = +${dv.bonusVal}</div>
-  </div>`;
-}
-
-// ---- conditions (strain & corruption) with the live effect on your stats ----
-function strainCalcHtml(d: any) {
-  const pen = d.strainPenalty;
-  return `<div class="cs-f">Reserve <b>${d.reserve.value}</b> = ${esc(d.reserve.formula)} — strain only bites once it passes Reserve.</div>
-    <div class="cs-f" style="color:${pen ? 'var(--color-nonogl)' : 'var(--color-faint)'}">${pen ? `over Reserve by <b>${pen}</b> → every ability −${pen}` : 'within Reserve — no ability penalty'}</div>
-    ${pen ? `<div class="cs-ladder" style="margin-top:.35rem">${['body', 'mind', 'reflex'].map((a) => `<span class="cs-sev major">${a[0].toUpperCase() + a.slice(1)} ${d.ability[a].adjusted.value} <span class="t">−${pen}</span></span>`).join('')}</div>` : ''}`;
-}
-function corrCalcHtml(d: any) {
-  const band = d.corruption.band;
-  const chip = (k: string) => `<span class="cs-sev ${band === k ? (k === 'Morbid' ? 'major' : 'moderate') : ''}">${k}</span>`;
-  return `<div class="cs-f">Scale <b>${esc(band)}</b> · Clear 0–5 · Dark 6–11 · Morbid 12–17</div>
-    <div class="cs-ladder" style="margin-top:.35rem">${chip('Clear')}${chip('Dark')}${chip('Morbid')}</div>
-    <div class="cs-f">Panic pool grows with Corruption; your archetype's Panic response reads off this scale.</div>`;
-}
-function conditionsBlock() {
-  const d = derive(char);
-  const stepper = (cond: string, valId: string) => `
-    <button type="button" class="cs-step" data-cond="${cond}" data-d="-1">−</button>
-    <span class="cs-num" id="${valId}" style="font-size:1.5rem;min-width:1.6rem;text-align:center;font-family:var(--font-mono)">${char[cond]}</span>
-    <button type="button" class="cs-step" data-cond="${cond}" data-d="1">+</button>
-    <input class="cs-input num" type="number" data-cond-input="${cond}" value="${char[cond]}" style="width:4rem;margin-left:auto">`;
-  return `<div class="cs-grid" style="grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))">
-    <div class="card" style="padding:.9rem 1rem">
-      <div style="display:flex;align-items:center;gap:.5rem"><div class="lbl" style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-faint)">Strain</div>${stepper('strain', 'cs-strain-val')}</div>
-      <div id="cs-cond-strain" style="margin-top:.4rem">${strainCalcHtml(d)}</div>
-    </div>
-    <div class="card" style="padding:.9rem 1rem">
-      <div style="display:flex;align-items:center;gap:.5rem"><div class="lbl" style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--color-faint)">Corruption</div>${stepper('corruption', 'cs-corr-val')}</div>
-      <div id="cs-cond-corr" style="margin-top:.4rem">${corrCalcHtml(d)}</div>
-    </div>
   </div>`;
 }
 
@@ -263,8 +235,7 @@ function render() {
     <div class="cs-grid" id="cs-abilities" style="grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))">
       ${['body', 'mind', 'reflex'].map(abilityRow).join('')}
     </div>
-    <div class="cs-eyebrow">Conditions — strain &amp; corruption, with live effect on your stats</div>
-    <div id="cs-cond-wrap">${conditionsBlock()}</div>
+    <div class="cs-f" style="margin:.5rem 0 0">Strain, conditions, damage &amp; corruption are tracked live on the <b>sheet</b> during play — not here.</div>
     <div class="cs-eyebrow">Skills — tick the ones you're trained in</div>
     <div id="cs-skills-wrap">${skillsBlock()}</div>
     <div class="cs-cols">
@@ -286,17 +257,6 @@ function reRenderAbilities() { document.getElementById('cs-abilities')!.innerHTM
 function reRenderSkills() { document.getElementById('cs-skills-wrap')!.innerHTML = skillsBlock(); bindSkills(); }
 function reRenderDisc() { document.getElementById('cs-disc-wrap')!.innerHTML = disciplinesBlock(); bindDisc(); }
 function reRenderItems() { document.getElementById('cs-items-wrap')!.innerHTML = itemsBlock(); bindItems(); }
-function reRenderConditions() { document.getElementById('cs-cond-wrap')!.innerHTML = conditionsBlock(); bindConditions(); }
-
-/** Update the conditions read-outs in place without replacing their inputs. */
-function syncConditions() {
-  const d = derive(char);
-  const set = (id2: string, html: string) => { const el = document.getElementById(id2); if (el) el.innerHTML = html; };
-  set('cs-strain-val', String(char.strain));
-  set('cs-corr-val', String(char.corruption));
-  set('cs-cond-strain', strainCalcHtml(d));
-  set('cs-cond-corr', corrCalcHtml(d));
-}
 
 function bind() {
   // scalar identity fields (tier is a select; archetype/background come from ref selects)
@@ -306,11 +266,11 @@ function bind() {
       const v = (el as HTMLInputElement).value;
       char[f] = ['tier', 'money'].includes(f) ? Number(v) || 0 : (v || (f === 'archetype' || f === 'background' ? null : ''));
       markDirty();
-      if (f === 'tier') { reRenderAbilities(); reRenderSkills(); syncConditions(); reRenderDisc(); refreshXpTotals(); }
+      if (f === 'tier') { reRenderAbilities(); reRenderSkills(); reRenderDisc(); refreshXpTotals(); }
     }));
   const view = document.getElementById('cs-view') as HTMLAnchorElement;
   view.addEventListener('click', async (e) => { e.preventDefault(); await save(); if (id) location.href = `/characters/sheet?c=${id}`; });
-  bindAbilities(); bindConditions(); bindSkills(); bindDisc(); bindItems(); bindNotes(); bindXp();
+  bindAbilities(); bindSkills(); bindDisc(); bindItems(); bindNotes(); bindXp();
 }
 
 function reRenderNotes() { document.getElementById('cs-notes-wrap')!.innerHTML = notesBlock(); bindNotes(); }
@@ -331,7 +291,7 @@ function bindAbilities() {
     el.addEventListener('input', () => {
       const k = (el as HTMLElement).dataset.ab!, p = (el as HTMLElement).dataset.p!;
       char.abilities[k][p] = Number((el as HTMLInputElement).value) || 0;
-      markDirty(); reRenderSkills(); syncConditions(); refreshXpTotals();
+      markDirty(); reRenderSkills(); refreshXpTotals();
     }));
   mount.querySelectorAll('[data-abstart]').forEach((el) =>
     el.addEventListener('input', () => {
@@ -350,23 +310,6 @@ function bindAbilities() {
     el.addEventListener('click', () => {
       char.abilities[(el as HTMLElement).dataset.tempclear!].temp = 0;
       markDirty(); reRenderAbilities(); reRenderSkills();
-    }));
-}
-
-function bindConditions() {
-  document.querySelectorAll('[data-cond]').forEach((el) =>
-    el.addEventListener('click', () => {
-      const c2 = (el as HTMLElement).dataset.cond!, dlt = Number((el as HTMLElement).dataset.d);
-      char[c2] = Math.max(0, (Number(char[c2]) || 0) + dlt);
-      const inp = document.querySelector(`[data-cond-input="${c2}"]`) as HTMLInputElement | null;
-      if (inp) inp.value = String(char[c2]);
-      markDirty(); syncConditions(); reRenderAbilities(); reRenderSkills();
-    }));
-  document.querySelectorAll('[data-cond-input]').forEach((el) =>
-    el.addEventListener('input', () => {
-      const c2 = (el as HTMLElement).dataset.condInput!;
-      char[c2] = Math.max(0, Number((el as HTMLInputElement).value) || 0);
-      markDirty(); syncConditions(); reRenderAbilities(); reRenderSkills();
     }));
 }
 

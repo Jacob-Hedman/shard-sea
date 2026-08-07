@@ -27,8 +27,26 @@ export function sanitize(input) {
     abilityStart: input.abilityStart
       ? { body: numOr(input.abilityStart.body), mind: numOr(input.abilityStart.mind), reflex: numOr(input.abilityStart.reflex) }
       : null,
-    strain: numOr(input.strain),
+    strain: (input.strain && typeof input.strain === 'object')
+      ? { standard: numOr(input.strain.standard), persistent: numOr(input.strain.persistent), permanent: numOr(input.strain.permanent) }
+      : { standard: numOr(input.strain), persistent: 0, permanent: 0 },
     corruption: numOr(input.corruption),
+    damage: numOr(input.damage),
+    conditions: arr(input.conditions).slice(0, 40).map((k) => ({
+      slug: k.slug ? String(k.slug).slice(0, 60) : null,
+      name: String(k.name || '').slice(0, 60),
+      severity: k.severity ? String(k.severity).slice(0, 20) : '',
+      effects: k.effects ? String(k.effects).slice(0, 600) : '',
+      x: k.x == null ? null : numOr(k.x),
+      note: k.note ? String(k.note).slice(0, 200) : '',
+    })),
+    injuries: arr(input.injuries).slice(0, 40).map((i) => ({
+      id: String(i.id || crypto.randomUUID()),
+      name: String(i.name || 'Injury').slice(0, 80),
+      severity: String(i.severity || 'Minor').slice(0, 20),
+      strain: numOr(i.strain),
+      note: i.note ? String(i.note).slice(0, 200) : '',
+    })),
     expEarned: numOr(input.expEarned, 500),
     money: numOr(input.money),
     skills: arr(input.skills).map(String).slice(0, 10),

@@ -339,6 +339,15 @@ header.scrolled {
 .cs-eq .stats { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
 .cs-roll-link { color: var(--color-gold); font-size: 0.72rem; cursor: pointer; background: none; border: 0; font-family: inherit; }
 
+/* live play controls: condition chips, remove buttons, small steppers */
+.cs-cond { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;
+  border: 1px solid var(--color-line-strong); border-radius: 7px; padding: 0.12rem 0.35rem; background: var(--color-surface-2); }
+.cs-cond b { color: var(--color-ink); font-weight: 500; }
+.cs-x { background: none; border: 0; color: var(--color-faint); cursor: pointer; font-size: 0.72rem; line-height: 1; padding: 0 0.1rem; }
+.cs-x:hover { color: var(--color-nonogl); }
+.cs-step-sm { width: 1.15rem; height: 1.15rem; border-radius: 5px; font-size: 0.75rem; padding: 0; }
+.cs-pill.broken { border-color: color-mix(in oklab, var(--color-nonogl) 55%, transparent); }
+
 /* roll dialog */
 .cs-dialog { border: 0; padding: 0; background: transparent; color: var(--color-ink); max-width: 92vw; }
 .cs-dialog::backdrop { background: rgba(0, 0, 0, 0.66); backdrop-filter: blur(3px); }

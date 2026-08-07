@@ -41,6 +41,20 @@ export const CORRUPTION_SCALE = [
   { key: 'dark', label: 'Dark', min: 6, max: 11 },
   { key: 'morbid', label: 'Morbid', min: 12, max: 17 },
 ];
+// Strain comes in three types, tracked separately below your Reserve (PHB a_Health).
+// Their total, in excess of Reserve, is what drops your abilities.
+export const STRAIN_TYPES = [
+  { key: 'standard', label: 'Standard', mark: '/', sheds: 'expires in 10 minutes' },
+  { key: 'persistent', label: 'Persistent', mark: '✕', sheds: 'shed by Resting' },
+  { key: 'permanent', label: 'Permanent', mark: '✱', sheds: 'from Injuries — needs healing' },
+];
+// How each Injury Severity is removed (PHB b_Attacks · Treating Injuries).
+export const INJURY_REMOVAL = {
+  Minor: 'First-Aid, or Rest',
+  Moderate: 'Recovery — 10× Injury Strain',
+  Major: 'Surgery, then Recovery ×3',
+  Lethal: 'unrecoverable — you are dead',
+};
 export const AP_PER_TURN = 3;               // gain 3 AP at the start of your Turn (PHB Combat)
 // Panic Risk pool sizes by severity; reduced by your Mind bonus, minimum one.
 export const PANIC_POOL = { minor: 2, moderate: 3, major: 6 };

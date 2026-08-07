@@ -21,7 +21,7 @@ import Layout from '../../components/Layout.astro';
       try {
         const char = await (await fetch(`/api/characters/${id}`)).json();
         if (char.error) { mount.innerHTML = '<p class="text-nonogl">Character not found.</p>'; return; }
-        mountSheet(mount, char);
+        mountSheet(mount, char, id);
       } catch { mount.innerHTML = '<p class="text-nonogl">Could not load this character.</p>'; }
     }
     document.addEventListener('astro:page-load', run);

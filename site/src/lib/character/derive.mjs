@@ -12,6 +12,12 @@ import {
 const ex = (value, formula, parts = []) => ({ value, formula, parts });
 const num = (v) => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
 
+/** Strain is stored as three tracked types; older docs stored a single number. */
+function normStrain(s) {
+  if (s && typeof s === 'object') return { standard: num(s.standard), persistent: num(s.persistent), permanent: num(s.permanent) };
+  return { standard: num(s), persistent: 0, permanent: 0 };
+}
+
 /** Fill any missing fields so a partial/old document derives without throwing. */
 export function normalizeCharacter(c = {}) {
   const ab = c.abilities || {};
@@ -24,8 +30,11 @@ export function normalizeCharacter(c = {}) {
     background: c.background || null,
     abilities: { body: mk(ab.body), mind: mk(ab.mind), reflex: mk(ab.reflex) },
     abilityStart: c.abilityStart || null,
-    strain: num(c.strain),
+    strain: normStrain(c.strain),
     corruption: num(c.corruption),
+    conditions: Array.isArray(c.conditions) ? c.conditions : [],
+    injuries: Array.isArray(c.injuries) ? c.injuries : [],
+    damage: num(c.damage),
     expEarned: c.expEarned == null ? CREATION_EXP : num(c.expEarned),
     money: num(c.money),
     skills: Array.isArray(c.skills) ? c.skills : [],
@@ -44,12 +53,20 @@ export function normalizeCharacter(c = {}) {
 
 export function derive(raw) {
   const c = normalizeCharacter(raw);
-  const strain = c.strain;
   const tier = c.tier;
 
   // --- Reserve & the strain penalty (strain only hurts once it passes Reserve) ---
   const baseBodyBonus = abilityBonus(c.abilities.body.base + c.abilities.body.bonus);
   const reserve = reserveFn(tier, baseBodyBonus);
+  // Injuries each carry Permanent Strain equal to their Damage (PHB a_Health).
+  const injuries = c.injuries.map((i) => ({ id: i.id || '', name: String(i.name || 'Injury'), severity: String(i.severity || 'Minor'), strain: num(i.strain), note: String(i.note || '') }));
+  const injuryStrain = injuries.reduce((s, i) => s + i.strain, 0);
+  const strainTracks = {
+    standard: c.strain.standard,
+    persistent: c.strain.persistent,
+    permanent: c.strain.permanent + injuryStrain,   // permanent strain = manual + all injuries
+  };
+  const strain = strainTracks.standard + strainTracks.persistent + strainTracks.permanent;
   const strainPenalty = Math.max(0, strain - reserve.value);
 
   // --- abilities ---
@@ -98,6 +115,16 @@ export function derive(raw) {
   const maxEnc = ex(maxEncVal, '3 × Body', [{ label: 'Body', value: B }]);
   const carried = c.items.reduce((s, i) => s + num(i.bulk) * (num(i.qty) || 1), 0);
   const penalty = Math.max(0, carried - maxEncVal);
+
+  // --- live damage vs the DT ladder → current Injury Severity band ---
+  const damage = c.damage;
+  let dmgBand = null;
+  if (damage > dtVal) dmgBand = 'Minor';
+  if (damage >= dtVal + 10) dmgBand = 'Moderate';
+  if (damage >= dtVal + 20) dmgBand = 'Major';
+  if (damage >= dtVal + 30) dmgBand = 'Lethal';
+  // Any Ability driven to 0 (usually by Strain over Reserve) = Incapacitated (PHB a_Health).
+  const incapacitated = [B, M, R].some((v) => v <= 0);
 
   // --- skills ---
   const trained = new Set(c.skills);
@@ -166,12 +193,15 @@ export function derive(raw) {
   if (totalDegrees > disciplineCapTotal(tier)) warnings.push(`${totalDegrees} total discipline degrees exceed the 6×Tier cap (${disciplineCapTotal(tier)}).`);
   if (spentVal > c.expEarned) warnings.push(`EXP overspent by ${spentVal - c.expEarned}.`);
   if (penalty > 0) warnings.push(`Over-encumbered by ${penalty} Bulk (reduces Movement & Initiative).`);
-
-  if (strainPenalty > 0) warnings.push(`Strain ${strain} exceeds Reserve ${reserve.value} — abilities −${strainPenalty}.`);
+  if (strainPenalty > 0) warnings.push(`Strain ${strain} exceeds Reserve ${reserve.value} — all abilities & derived stats −${strainPenalty}.`);
+  if (incapacitated) warnings.push(`Incapacitated — an ability has fallen to 0.`);
+  if (dmgBand === 'Lethal') warnings.push(`Damage ${damage} is past DT+30 — Lethal band.`);
 
   return {
     char: c, tier,
-    ability, movement, initiative, ap, reserve, strain, strainPenalty,
+    ability, movement, initiative, ap, reserve,
+    strain, strainTracks, strainPenalty, injuryStrain, injuries, incapacitated,
+    conditions: c.conditions, damage, dmgBand,
     dt, st, scrapes, shakes, maxEnc, carried, penalty, panic,
     corruption: { value: c.corruption, band: corruptionBand(c.corruption) },
     armorDT, skills, disciplines, byKind, exp, warnings,
