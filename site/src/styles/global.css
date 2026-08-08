@@ -272,6 +272,12 @@ header.scrolled {
   margin-top: 0.2rem; font-variant-numeric: tabular-nums; line-height: 1.45;
 }
 .cs-f b { color: var(--color-gold-strong); font-weight: 500; }
+/* readable arithmetic: dim the term names, highlight the numbers, land on the result */
+.cs-calc { line-height: 1.6; }
+.cs-calc .t { color: var(--color-faint); }
+.cs-calc .op { color: var(--color-faint); padding: 0 0.15rem; }
+.cs-calc .res { color: var(--color-ink); font-weight: 600;
+  border-bottom: 1px solid color-mix(in oklab, var(--color-gold) 45%, transparent); }
 .cs-f.bad, .bad { color: var(--color-nonogl); }
 .cs-f.good, .good { color: var(--color-ogl); }
 .gold { color: var(--color-gold-strong); }
@@ -359,10 +365,37 @@ header.scrolled {
 .cs-note-body { font-size: 0.88rem; color: var(--color-muted); white-space: pre-wrap; margin-top: 0.3rem; }
 
 /* ---- strain tracks ---- */
-.cs-track { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.35rem; flex-wrap: wrap; }
-.cs-track-lbl { min-width: 5.6rem; }
-.cs-mark { font-family: var(--font-mono); }
-.cs-track-note { margin: 0 0 0 auto; }
+.cs-track { display: grid; grid-template-columns: 6.4rem auto 1fr; align-items: center;
+  gap: 0.5rem; margin-top: 0.3rem; }
+.cs-track-lbl { font-family: var(--font-mono); font-size: 0.72rem; color: var(--color-muted); }
+.cs-mark { color: var(--color-gold); }
+.cs-track-note { color: var(--color-faint); margin: 0; }
+/* a stepper is one control: [−] value [+] */
+.cs-stepper { display: inline-flex; align-items: center; gap: 0.2rem; background: var(--color-base);
+  border: 1px solid var(--color-line); border-radius: 8px; padding: 0.12rem; }
+.cs-stepper .cs-step { border: 0; background: none; color: var(--color-faint); min-width: 1.45rem; height: 1.45rem; }
+.cs-stepper .cs-step:hover { color: var(--color-gold); background: var(--color-surface-2); }
+.cs-stepper .cs-count { color: var(--color-muted); font-size: 0.9rem; }
+.cs-stepper .cs-count.on { color: var(--color-ink); font-weight: 600; }
+.cs-stepper .cs-big { padding: 0 0.3rem; }
+.cs-of { font-size: 0.8rem; color: var(--color-faint); }
+.cs-of b { color: var(--color-muted); }
+.cs-sub { margin-top: 0.6rem; color: var(--color-faint); }
+.cs-scale { margin-top: 0.35rem; }
+/* dice pools as a scannable row of numbers */
+.cs-pool { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+.cs-pool > span { display: flex; flex-direction: column; align-items: center; min-width: 3.4rem;
+  border: 1px solid var(--color-line); border-radius: 8px; padding: 0.2rem 0.35rem; background: var(--color-surface-2); }
+.cs-pool b { font-family: var(--font-mono); font-size: 1.05rem; color: var(--color-ink); line-height: 1.1; }
+.cs-pool small { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-faint); }
+.cs-pool .sep { border-color: #8a6f45; }
+.cs-pool .sep b { color: var(--color-gold-strong); }
+.cs-armorline { margin-top: 0.4rem; }
+/* inline "read more" that keeps the density available without the wall of text */
+.cs-mini { margin-top: 0.5rem; }
+.cs-mini summary { cursor: pointer; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--color-faint); }
+.cs-mini summary:hover { color: var(--color-gold); }
 .cs-btn-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.6rem; align-items: center; }
 
 /* ---- skills ---- */

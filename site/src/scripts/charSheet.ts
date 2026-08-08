@@ -24,16 +24,26 @@ const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'consumable', 'material'];
 const REF_KINDS = ['feat', 'threshold_feat', 'archetype', 'condition', 'action', 'skill', 'discipline',
   'background', 'fixation', ...EQUIP_KINDS];
 
-const partsStr = (parts: any[]) =>
-  parts && parts.length ? ' = ' + parts.map((p) => `${esc(p.label)} <b>${esc(p.value)}</b>`).join(' + ') : '';
-/** Print the working once. A single part whose label repeats the formula would
- *  otherwise render as "= Base = Base 10". */
-const fLine = (e: any) => {
-  const parts = e.parts || [];
-  if (parts.length === 1 && String(e.formula).startsWith(parts[0].label))
-    return `<div class="cs-f">= ${esc(e.formula)} <b>${esc(parts[0].value)}</b></div>`;
-  return `<div class="cs-f">= ${esc(e.formula)}${partsStr(parts)}</div>`;
-};
+/** Render an explained value as arithmetic you can actually read:
+ *    Tier 2 + Body bonus 1 = 3
+ *    Reflex 6 − Dragon Armor 4 = 2
+ *  Term names are dimmed, numbers are highlighted, the result is emphasised.
+ *  Previously this printed the template AND the substitution
+ *  ("= Tier + permanent Body bonus = Tier 2 + permanent Body bonus 1"). */
+function calcText(e: any) {
+  const parts = (e.parts || []).filter((p: any) => p && p.label);
+  if (!parts.length) return esc(e.formula);
+  const term = (p: any, i: number) => {
+    const neg = p.value < 0;
+    const mag = i === 0 && !neg ? p.value : Math.abs(p.value);
+    const op = i === 0 ? (neg ? '−&nbsp;' : '') : (neg ? '− ' : '+ ');
+    return `${op}<span class="t">${esc(p.label)}</span> <b>${esc(mag)}</b>`;
+  };
+  const body = parts.map(term).join(' ');
+  if (parts.length === 1) return body;
+  return `${body} <span class="op">=</span> <b class="res">${esc(e.value)}</b>`;
+}
+const fLine = (e: any) => `<div class="cs-f cs-calc">${calcText(e)}</div>`;
 const pill = (label: string, v: any) => (v != null && v !== '' && v !== 0) ? `<span class="cs-pill">${esc(label)} <b>${esc(v)}</b></span>` : '';
 const abLabel = (s: any) => (s.ability ? s.ability[0].toUpperCase() + s.ability.slice(1) : 'Ability');
 const numFrom = (v: any) => Number(String(v ?? '').replace(/[^\d.-]/g, '')) || 0;
@@ -125,8 +135,13 @@ function ensureShape(c: any) {
 }
 
 // ---- small UI helpers --------------------------------------------------
+/** ±1 buttons read as bare − / + so they look like controls, not values;
+ *  bigger steps keep their magnitude ("−10", "+10"). */
 const stepBtns = (attr: string, key: string, steps: number[], what = '') =>
-  steps.map((n) => `<button type="button" class="cs-step" ${attr}="${esc(key)}" data-d="${n}" aria-label="${esc((n > 0 ? 'increase ' : 'decrease ') + (what || key) + ' by ' + Math.abs(n))}">${n > 0 ? '+' + n : n}</button>`).join('');
+  steps.map((n) => {
+    const face = Math.abs(n) === 1 ? (n > 0 ? '+' : '−') : (n > 0 ? '+' + n : '−' + Math.abs(n));
+    return `<button type="button" class="cs-step" ${attr}="${esc(key)}" data-d="${n}" aria-label="${esc((n > 0 ? 'increase ' : 'decrease ') + (what || key) + ' by ' + Math.abs(n))}">${face}</button>`;
+  }).join('');
 const sevClass = (sev: string) => (sev === 'Major' || sev === 'Lethal') ? 'major' : sev === 'Moderate' ? 'moderate' : '';
 
 /** Re-hydrate equipment stats from the codex for items saved before a field existed.
@@ -281,19 +296,21 @@ function alertsHtml(d: any) {
 // ---- live play panel ---------------------------------------------------
 function strainCardHtml(d: any) {
   const trackRow = (t: any) => {
-    const injPart = t.key === 'permanent' && d.injuryStrain ? ` <span class="cs-f cs-inline">+${d.injuryStrain} from injuries</span>` : '';
+    const injPart = t.key === 'permanent' && d.injuryStrain ? ` +${d.injuryStrain} from injuries` : '';
+    const v = char.strain[t.key];
     return `<div class="cs-track">
-      <span class="cs-sev cs-track-lbl"><span class="cs-mark">${t.mark}</span> ${t.label}</span>
-      ${stepBtns('data-strain', t.key, [-1], t.label + ' strain')}
-      <span class="cs-count">${char.strain[t.key]}</span>
-      ${stepBtns('data-strain', t.key, [1], t.label + ' strain')}
+      <span class="cs-track-lbl"><span class="cs-mark">${t.mark}</span> ${t.label}</span>
+      <span class="cs-stepper">
+        ${stepBtns('data-strain', t.key, [-1], t.label + ' strain')}
+        <span class="cs-count ${v ? 'on' : ''}">${v}</span>
+        ${stepBtns('data-strain', t.key, [1], t.label + ' strain')}</span>
       <span class="cs-f cs-track-note">${t.sheds}${injPart}</span></div>`;
   };
   return `<div class="card cs-play-card">
-    <div class="cs-lbl">Strain vs Reserve ${d.reserve.value}</div>
+    <div class="cs-lbl">Strain</div>
     <div class="cs-big-row">
       <span class="cs-num cs-big ${d.strainPenalty ? 'bad' : ''}">${d.strain}</span>
-      <span class="cs-f">/ ${d.reserve.value}</span></div>
+      <span class="cs-of">of <b>${d.reserve.value}</b> Reserve</span></div>
     ${fLine(d.reserve)}
     <div class="cs-f ${d.strainPenalty ? 'bad' : ''}">${d.strainPenalty
       ? `over by <b>${d.strainPenalty}</b> → all abilities &amp; derived stats −${d.strainPenalty}`
@@ -317,19 +334,23 @@ function corruptionCardHtml(d: any) {
   return `<div class="card cs-play-card">
     <div class="cs-lbl">Corruption</div>
     <div class="cs-big-row">
-      ${stepBtns('data-corr', 'c', [-1], 'corruption')}
-      <span class="cs-num cs-big ${d.corruption.terminal ? 'bad' : ''}">${d.corruption.value}</span>
-      ${stepBtns('data-corr', 'c', [1], 'corruption')}
-      <span class="cs-f">scale <b>${esc(band)}</b></span></div>
-    <div class="cs-ladder">${chip('Clear')}${chip('Dark')}${chip('Morbid')}${chip('Terminal')}</div>
-    <div class="cs-f">Clear 0–5 · Dark 6–11 · Morbid 12–17 · Terminal 18+ (you Fall)</div>
-    <div class="cs-ladder">
-      <span class="cs-sev minor">panic minor ${d.panic.minor}</span>
-      <span class="cs-sev moderate">mod ${d.panic.moderate}</span>
-      <span class="cs-sev major">major ${d.panic.major}</span>
-      <span class="cs-sev">corruption roll ${d.corruption.pool}</span></div>
-    <div class="cs-f">Panic pools: ${esc(d.panic.formula)}. Corruption roll: ${d.corruption.pool} Chaos dice, +1 Corruption per 6.</div>
-    ${char.fixation ? `<div class="cs-f">Depravity <b>${d.corruption.depravity}</b> = 1 + one per six Corruption</div>` : ''}
+      <span class="cs-stepper">
+        ${stepBtns('data-corr', 'c', [-1], 'corruption')}
+        <span class="cs-num cs-big ${d.corruption.terminal ? 'bad' : ''}">${d.corruption.value}</span>
+        ${stepBtns('data-corr', 'c', [1], 'corruption')}</span>
+      <span class="cs-of">scale <b>${esc(band)}</b></span></div>
+    <div class="cs-ladder cs-scale" title="Clear 0–5 · Dark 6–11 · Morbid 12–17 · Terminal 18+">
+      ${chip('Clear')}${chip('Dark')}${chip('Morbid')}${chip('Terminal')}</div>
+    <div class="cs-lbl cs-sub">Dice pools</div>
+    <div class="cs-pool">
+      <span><b>${d.panic.minor}</b><small>panic minor</small></span>
+      <span><b>${d.panic.moderate}</b><small>moderate</small></span>
+      <span><b>${d.panic.major}</b><small>major</small></span>
+      <span class="sep"><b>${d.corruption.pool}</b><small>corruption</small></span>
+    </div>
+    <div class="cs-f">Panic pools already cut by your Mind bonus <b>${d.ability.mind.bonusVal}</b> (min 1).
+      Each 6 rolled Panics you; on a Corruption roll each 6 is +1 Corruption.</div>
+    ${char.fixation ? `<div class="cs-f">Depravity <b>${d.corruption.depravity}</b> — 1 + one per six Corruption</div>` : ''}
   </div>`;
 }
 
@@ -351,14 +372,17 @@ function damageCardHtml(d: any) {
         : `<span class="cs-f">No armor equipped.</span>`}
       <button type="button" class="cs-btn cs-btn-gold" id="cs-dmg-injure">Injury Risk →</button>
     </div>
-    <div class="cs-f">Armor Rated for the type negates it and takes Notches equal to the Damage; past its
-      Durability it Breaks and you take the rest. Otherwise roll 2d6 on that type's
-      <a class="cs-link" href="/damage">Injury Risk table</a> — the Injury carries Permanent Strain equal to the Damage.</div>
     ${armor.map((a: any) => {
       const dur = numFrom(a.durability);
       const broken = dur > 0 && (a.notches || 0) > dur;
-      return `<div class="cs-f" data-armorline="${esc(a.id)}">${esc(a.name)} — Rated <b>${esc(a.rating || '—')}</b> · notches ${a.notches || 0}${dur ? `/${dur}` : ''}${broken ? ' <b class="bad">BROKEN</b>' : ''}</div>`;
+      return `<div class="cs-f cs-armorline"><span class="t">${esc(a.name)}</span> negates <b>${esc(a.rating || '—')}</b>
+        · notches <b>${a.notches || 0}</b>${dur ? `/${dur}` : ''}${broken ? ' <b class="bad">BROKEN</b>' : ''}</div>`;
     }).join('')}
+    <details class="cs-mini"><summary>how damage resolves</summary>
+      <div class="cs-f">Armor Rated for the type negates it and takes Notches equal to the Damage; past its
+        Durability it Breaks and you take the rest. Otherwise roll 2d6 on that type's
+        <a class="cs-link" href="/damage">Injury Risk table</a> — the Injury carries Permanent Strain equal to the Damage.</div>
+    </details>
   </div>`;
 }
 
