@@ -49,6 +49,21 @@ export const BASE_DAMAGE = {
   traumatic: 3, voltaic: 3, incendiary: 3, chaos: 3, order: 3, explosive: 4, catastrophic: 6,
 };
 export const DAMAGE_TYPES = Object.keys(BASE_DAMAGE);
+// Damage Types group into categories, and Armor Ratings are written using either
+// (e.g. "Physical, Incendiary" covers every Physical type plus Incendiary).
+export const DAMAGE_CATEGORY = {
+  cutting: 'Physical', crushing: 'Physical', piercing: 'Physical', impaling: 'Physical',
+  rending: 'Physical', traumatic: 'Physical', explosive: 'Physical', catastrophic: 'Physical',
+  frost: 'Energy', voltaic: 'Energy', incendiary: 'Energy', chaos: 'Energy', order: 'Energy',
+};
+/** Does this armor Rating negate that damage type? (PHB a_Health §Armor) */
+export function ratingCovers(rating, type) {
+  const r = String(rating || '').toLowerCase();
+  if (!r) return false;
+  const t = String(type || '').toLowerCase();
+  if (r.includes('all')) return true;
+  return r.includes(t) || r.includes(String(DAMAGE_CATEGORY[t] || '').toLowerCase());
+}
 
 // Strain comes in three types, tracked separately below your Reserve (PHB a_Health).
 // Their total, in excess of Reserve, is what drops your abilities.
@@ -181,10 +196,13 @@ export const disciplineCapTotal = (tier) => 6 * tier;      // total degrees ≤ 
 export const DISCIPLINE_RANKS = ['—', 'Novice', 'Initiate', 'Expert', 'Master'];
 export const disciplineRank = (degree) => DISCIPLINE_RANKS[Math.min(degree, DISCIPLINE_RANKS.length - 1)] || '—';
 
-/** N ability advances cost 100 × the Tier they were bought at; grouped 6-per-tier. */
-export function abilityAdvanceCost(advances) {
+/** N ability advances cost 100 × the Tier they were bought at ("INTEGRATION COST:
+ *  100(your Tier)"), assuming the legal 6-per-Tier pacing. Never prices an advance
+ *  above the character's current Tier — an over-cap character is flagged by a
+ *  warning instead of being charged at a Tier they have not reached. */
+export function abilityAdvanceCost(advances, tier = MAX_TIER) {
   let total = 0;
-  for (let i = 1; i <= advances; i++) total += 100 * Math.ceil(i / ABILITY_ADVANCE_PER_TIER);
+  for (let i = 1; i <= advances; i++) total += 100 * Math.min(tier, Math.ceil(i / ABILITY_ADVANCE_PER_TIER));
   return total;
 }
 

@@ -5,6 +5,7 @@ import {
   ABILITIES, ABILITY_LABEL, SKILLS, PRINCIPAL_SKILLS, INJURY_REMOVAL,
   MAX_SKILLS, MAX_PRINCIPAL, TIER_COST_CUMULATIVE, CREATION_EXP, AP_PER_TURN, PANIC_POOL,
   MELEE_SKILLS, SPEEDS, HOUSE_ST_BASE, HOUSE_INJURY_STEPS, DEGREES_PER_TIER,
+  ABILITY_ADVANCE_PER_TIER, MAX_TIER,
   abilityBonus, adjustedAbility, disciplineCost, disciplineNextCost, disciplineRank,
   disciplineCapPerSkill, disciplineCapTotal, abilityAdvanceCost, foundryRoll,
   corruptionBand, corruptionPool, depravity, reserve as reserveFn, panicPool,
@@ -197,7 +198,7 @@ export function derive(raw) {
   // Advancing a Tier grants +1 to every Ability for free — don't bill those points.
   const tierGrant = Math.max(0, tier - 1);
   const advances = ABILITIES.reduce((s, a) => s + Math.max(0, c.abilities[a].base - num(start[a]) - tierGrant), 0);
-  const abilityCostVal = abilityAdvanceCost(advances);
+  const abilityCostVal = abilityAdvanceCost(advances, tier);
   const disciplineCostVal = disciplines.reduce((s, d) => s + d.cost.value, 0);
   const tierCostVal = TIER_COST_CUMULATIVE[tier] ?? 0;
   const rulesSpentVal = abilityCostVal + disciplineCostVal + tierCostVal;
@@ -222,10 +223,14 @@ export function derive(raw) {
     },
     advances,
     totalDegrees,
-    // gates on advancing to the next Tier (PHB a_Character Creation §Advancing your Tier)
-    nextTier: tier < 3 ? {
+    // Gates on advancing to the next Tier: 6 more Ability Advances and 6 more Degrees
+    // (PHB a_Character Creation §Advancing your Tier). Counted within the current Tier.
+    nextTier: tier < MAX_TIER ? {
       tier: tier + 1, cost: TIER_COST_CUMULATIVE[tier + 1] ?? 0,
-      advances, advancesNeeded: 6, degrees: totalDegrees, degreesNeeded: DEGREES_PER_TIER,
+      advances: Math.max(0, Math.min(ABILITY_ADVANCE_PER_TIER, advances - ABILITY_ADVANCE_PER_TIER * (tier - 1))),
+      advancesNeeded: ABILITY_ADVANCE_PER_TIER,
+      degrees: Math.max(0, Math.min(DEGREES_PER_TIER, totalDegrees - DEGREES_PER_TIER * (tier - 1))),
+      degreesNeeded: DEGREES_PER_TIER,
     } : null,
   };
 
@@ -251,6 +256,8 @@ export function derive(raw) {
   if (prinCount > MAX_PRINCIPAL) warnings.push(`${prinCount} principal skills — the limit is ${MAX_PRINCIPAL}.`);
   for (const d of disciplines) if (d.overCap) warnings.push(`${d.name} degree ${d.degree} exceeds the 2×Tier cap (${disciplineCapPerSkill(tier)}).`);
   if (totalDegrees > disciplineCapTotal(tier)) warnings.push(`${totalDegrees} total discipline degrees exceed the 6×Tier cap (${disciplineCapTotal(tier)}).`);
+  if (advances > ABILITY_ADVANCE_PER_TIER * tier)
+    warnings.push(`${advances} ability advances exceed the ${ABILITY_ADVANCE_PER_TIER}-per-Tier limit (${ABILITY_ADVANCE_PER_TIER * tier} at Tier ${tier}).`);
   if (spentVal > c.expEarned) warnings.push(`EXP overspent by ${spentVal - c.expEarned}.`);
   if (penalty > 0) warnings.push(`Over-encumbered by ${penalty} Bulk — Movement ${movement.value}, Initiative ${initiative.value}.`);
   if (penalty > 0 && (movement.value === 0 || initiative.value === 0)) warnings.push(`Movement or Initiative has reached 0 — you must drop something.`);

@@ -7,7 +7,7 @@ import { api, esc, openRoll } from './charApi';
 import { derive } from '../lib/character/derive.mjs';
 import {
   STRAIN_TYPES, DAMAGE_TYPES, BASE_DAMAGE, INJURY_SEVERITIES, CONDITION_COUNTERS,
-  STACKING_CONDITIONS, weaponDamage, parseBulk, MELEE_SKILLS, RANGED_SKILLS,
+  STACKING_CONDITIONS, weaponDamage, parseBulk, MELEE_SKILLS, RANGED_SKILLS, ratingCovers,
 } from '../lib/character/rules.mjs';
 import { hrefFor } from '../lib/sections';
 
@@ -20,11 +20,20 @@ let ref: Record<string, any[]> = {};
 let artBox: HTMLDialogElement | null = null;
 let artEdit: HTMLDialogElement | null = null;
 
-const REF_KINDS = ['feat', 'threshold_feat', 'archetype', 'condition', 'action', 'skill', 'discipline', 'background', 'fixation'];
+const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'consumable', 'material'];
+const REF_KINDS = ['feat', 'threshold_feat', 'archetype', 'condition', 'action', 'skill', 'discipline',
+  'background', 'fixation', ...EQUIP_KINDS];
 
 const partsStr = (parts: any[]) =>
   parts && parts.length ? ' = ' + parts.map((p) => `${esc(p.label)} <b>${esc(p.value)}</b>`).join(' + ') : '';
-const fLine = (e: any) => `<div class="cs-f">= ${esc(e.formula)}${partsStr(e.parts)}</div>`;
+/** Print the working once. A single part whose label repeats the formula would
+ *  otherwise render as "= Base = Base 10". */
+const fLine = (e: any) => {
+  const parts = e.parts || [];
+  if (parts.length === 1 && String(e.formula).startsWith(parts[0].label))
+    return `<div class="cs-f">= ${esc(e.formula)} <b>${esc(parts[0].value)}</b></div>`;
+  return `<div class="cs-f">= ${esc(e.formula)}${partsStr(parts)}</div>`;
+};
 const pill = (label: string, v: any) => (v != null && v !== '' && v !== 0) ? `<span class="cs-pill">${esc(label)} <b>${esc(v)}</b></span>` : '';
 const abLabel = (s: any) => (s.ability ? s.ability[0].toUpperCase() + s.ability.slice(1) : 'Ability');
 const numFrom = (v: any) => Number(String(v ?? '').replace(/[^\d.-]/g, '')) || 0;
@@ -61,16 +70,30 @@ function setSaveState(s: typeof saveState) {
 }
 function markDirty() {
   if (!cid) return;
+  saveRetries = 0;              // a fresh edit deserves a fresh set of attempts
   setSaveState('dirty');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 600);
 }
+let saveRetries = 0;
+const MAX_SAVE_RETRIES = 5;
 async function save() {
   if (!cid) return;
   clearTimeout(saveTimer); saveTimer = null;
   setSaveState('saving');
-  try { await api.update(cid, char); setSaveState('saved'); }
-  catch { setSaveState('dirty'); saveTimer = setTimeout(save, 4000); }   // bounded retry
+  try {
+    await api.update(cid, char);
+    saveRetries = 0;
+    setSaveState('saved');
+  } catch {
+    setSaveState('dirty');
+    // Retry a bounded number of times with backoff, then stop and stay visibly
+    // "Unsaved" rather than hammering an endpoint that is never going to accept us.
+    if (saveRetries < MAX_SAVE_RETRIES) {
+      saveRetries++;
+      saveTimer = setTimeout(save, 2000 * saveRetries);
+    }
+  }
 }
 /** Persist immediately — used when the page is about to go away. */
 function flush() {
@@ -106,12 +129,40 @@ const stepBtns = (attr: string, key: string, steps: number[], what = '') =>
   steps.map((n) => `<button type="button" class="cs-step" ${attr}="${esc(key)}" data-d="${n}" aria-label="${esc((n > 0 ? 'increase ' : 'decrease ') + (what || key) + ' by ' + Math.abs(n))}">${n > 0 ? '+' + n : n}</button>`).join('');
 const sevClass = (sev: string) => (sev === 'Major' || sev === 'Lethal') ? 'major' : sev === 'Moderate' ? 'moderate' : '';
 
+/** Re-hydrate equipment stats from the codex for items saved before a field existed.
+ *  Characters built earlier stored no `mode`, `rating`, `movement_penalty` or
+ *  `durability`, so their armor penalties and melee/ranged attack skill were wrong.
+ *  Only ever FILLS blanks — a value the player typed is never overwritten. */
+function healItems(c: any) {
+  let healed = 0;
+  for (const it of c.items) {
+    if (!it.refSlug) continue;
+    const rec = (ref[it.kind] || []).find((r: any) => r.slug === it.refSlug);
+    if (!rec) continue;
+    const st = rec.stat || {};
+    const fill = (k: string, v: any) => { if ((it[k] === '' || it[k] == null) && v) { it[k] = String(v); healed++; } };
+    fill('mode', st.mode); fill('weapon_group', st.weapon_group); fill('rating', st.rating);
+    fill('movement_penalty', st.movement_penalty); fill('durability', st.durability || st.durable);
+    fill('traits', st.traits); fill('activation', st.activation); fill('pattern', st.pattern);
+    fill('effects', st.effects || st.special);
+    if (!it.accuracy && st.accuracy) { it.accuracy = Number(String(st.accuracy).replace(/[^\d.-]/g, '')) || 0; healed++; }
+    if (it.tier == null && rec.tier != null) { it.tier = rec.tier; healed++; }
+    // codex Bulk is often a formula of Tier/Height — recompute when we never stored it
+    if (!it.bulkFormula) {
+      const b = parseBulk(st.bulk, Number(c.tier) || 1, Number(c.height) || 1.8);
+      if (b.formula) { it.bulk = b.value; it.bulkFormula = b.formula; healed++; }
+    }
+  }
+  return healed;
+}
+
 // ========================================================================
 export async function mountSheet(el: HTMLElement, character: any, id?: string) {
   clearTimeout(saveTimer); saveTimer = null;     // never let a stale timer fire at the new character
   mount = el; char = character; cid = id || null; saveState = 'saved';
   ensureShape(char);
   await loadRef();
+  if (healItems(char)) markDirty();     // persist the repair so the builder agrees
   render();
   bindLifecycle();
 }
@@ -301,11 +352,12 @@ function damageCardHtml(d: any) {
       <button type="button" class="cs-btn cs-btn-gold" id="cs-dmg-injure">Injury Risk →</button>
     </div>
     <div class="cs-f">Armor Rated for the type negates it and takes Notches equal to the Damage; past its
-      Durability it Breaks and you take the rest. Otherwise roll 2d6 on that type's Injury Risk table —
-      the Injury carries Permanent Strain equal to the Damage.</div>
+      Durability it Breaks and you take the rest. Otherwise roll 2d6 on that type's
+      <a class="cs-link" href="/damage">Injury Risk table</a> — the Injury carries Permanent Strain equal to the Damage.</div>
     ${armor.map((a: any) => {
       const dur = numFrom(a.durability);
-      return `<div class="cs-f">${esc(a.name)} — Rated <b>${esc(a.rating || '—')}</b> · notches ${a.notches || 0}${dur ? `/${dur}` : ''}${dur && (a.notches || 0) > dur ? ' <b class="bad">BROKEN</b>' : ''}</div>`;
+      const broken = dur > 0 && (a.notches || 0) > dur;
+      return `<div class="cs-f" data-armorline="${esc(a.id)}">${esc(a.name)} — Rated <b>${esc(a.rating || '—')}</b> · notches ${a.notches || 0}${dur ? `/${dur}` : ''}${broken ? ' <b class="bad">BROKEN</b>' : ''}</div>`;
     }).join('')}
   </div>`;
 }
@@ -766,10 +818,17 @@ function bindPlay() {
   on('[data-absorb]', 'click', (el) => {
     const it = char.items.find((i: any) => i.id === el.dataset.absorb);
     if (!it) return;
+    const type = (document.getElementById('cs-dmg-type') as HTMLSelectElement).value;
+    // Armor only negates damage it is RATED for (PHB a_Health §Armor).
+    if (!ratingCovers(it.rating, type)) {
+      const go = window.confirm(
+        `${it.name} is Rated for "${it.rating || '—'}", which does not cover ${cap(type)}.\n\n` +
+        `By the rules this damage is not negated — roll Injury Risk instead.\n\nNotch it anyway?`);
+      if (!go) return;
+    }
     const n = dmgAmount();
     const dur = numFrom(it.durability);
-    const before = Number(it.notches) || 0;
-    it.notches = before + n;
+    it.notches = (Number(it.notches) || 0) + n;
     if (dur > 0 && it.notches > dur) {
       const overflow = it.notches - dur;
       window.alert(`${it.name} Breaks — Notched past Durability ${dur}. You suffer the remaining ${overflow} damage: roll Injury Risk for it.`);
