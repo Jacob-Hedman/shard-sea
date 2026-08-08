@@ -2,7 +2,7 @@
 // pulls all choices (skills, disciplines, feats, equipment) from the codex.
 import { api, esc } from './charApi';
 import { derive } from '../lib/character/derive.mjs';
-import { SKILLS, MAX_SKILLS, PRINCIPAL_SKILLS } from '../lib/character/rules.mjs';
+import { SKILLS, MAX_SKILLS, PRINCIPAL_SKILLS, parseBulk } from '../lib/character/rules.mjs';
 
 let char: any;
 let id: string | null = null;
@@ -13,11 +13,11 @@ const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'consumable', 'material'];
 
 function newChar() {
   return {
-    name: 'New Character', tier: 1, archetype: null, background: null,
-    abilities: { body: { base: 3, bonus: 0, temp: 0 }, mind: { base: 3, bonus: 0, temp: 0 }, reflex: { base: 3, bonus: 0, temp: 0 } },
+    name: 'New Character', tier: 1, height: 1.8, archetype: null, fixation: null, background: null,
+    abilities: { body: { base: 3, bonus: 0, temp: 0, tax: 0 }, mind: { base: 3, bonus: 0, temp: 0, tax: 0 }, reflex: { base: 3, bonus: 0, temp: 0, tax: 0 } },
     abilityStart: { body: 3, mind: 3, reflex: 3 },
     strain: { standard: 0, persistent: 0, permanent: 0 }, corruption: 0, expEarned: 500, money: 0,
-    conditions: [], injuries: [], damage: 0,
+    conditions: [], injuries: [],
     skills: [], disciplines: [], feats: [], items: [], notes: '',
     expLedger: [],
     noteSections: [
@@ -71,12 +71,15 @@ export async function initBuilder(el: HTMLElement) {
     char = await api.get(id);
     if (char.error) { mount.innerHTML = `<p class="cs-warn">Character not found.</p>`; return; }
     // fill fields that older documents may lack, so every control has state
-    for (const k of ['body', 'mind', 'reflex']) { char.abilities[k] = char.abilities[k] || { base: 0, bonus: 0, temp: 0 }; if (char.abilities[k].temp == null) char.abilities[k].temp = 0; }
-    if (!Array.isArray(char.expLedger)) char.expLedger = [];
+    if (!char.abilities || typeof char.abilities !== 'object') char.abilities = {};
+    for (const k of ['body', 'mind', 'reflex']) {
+      const a = char.abilities[k] || {};
+      char.abilities[k] = { base: Number(a.base) || 0, bonus: Number(a.bonus) || 0, temp: Number(a.temp) || 0, tax: Math.max(0, Number(a.tax) || 0) };
+    }
     if (!char.strain || typeof char.strain !== 'object') char.strain = { standard: Number(char.strain) || 0, persistent: 0, permanent: 0 };
-    if (!Array.isArray(char.conditions)) char.conditions = [];
-    if (!Array.isArray(char.injuries)) char.injuries = [];
-    if (char.damage == null) char.damage = 0;
+    for (const k of ['expLedger', 'conditions', 'injuries', 'items', 'skills', 'disciplines', 'feats', 'noteSections'])
+      if (!Array.isArray(char[k])) char[k] = [];
+    if (!char.height) char.height = 1.8;
   } else {
     char = newChar();
   }
@@ -183,14 +186,17 @@ function itemsBlock() {
     <div class="cs-eq"><div class="et">
       <span class="ek">${kindLabel[it.kind] || it.kind}</span>
       ${it.refSlug ? `<b>${esc(it.name)}</b>` : `<input class="cs-input" data-iname="${i}" value="${esc(it.name)}" style="width:11rem;padding:.15rem .4rem;font-weight:600">`}
-      ${it.kind === 'armor' ? `<label class="cs-pill" style="cursor:pointer"><input type="checkbox" data-equip="${i}" ${it.equipped ? 'checked' : ''}> equipped</label>
-        <span class="cs-pill">DT+ <input class="cs-input num" style="width:3.2rem;display:inline-block;padding:.1rem .3rem" type="number" data-dtplus="${i}" value="${it.dtPlus || 0}"></span>` : ''}
-      <span class="cs-pill">Bulk <input class="cs-input num" style="width:3.5rem;display:inline-block;padding:.1rem .3rem" type="number" data-bulk="${i}" value="${it.bulk || 0}"></span>
+      ${it.kind === 'armor' || it.kind === 'artifice' ? `<label class="cs-pill" style="cursor:pointer"><input type="checkbox" data-equip="${i}" ${it.equipped ? 'checked' : ''}> equipped</label>` : ''}
+      <span class="cs-pill">Bulk <input class="cs-input num" style="width:4rem;display:inline-block;padding:.1rem .3rem" type="number" step="0.01" data-bulk="${i}" value="${it.bulk || 0}"></span>
       <span class="cs-pill">Qty <input class="cs-input num" style="width:3rem;display:inline-block;padding:.1rem .3rem" type="number" data-qty="${i}" value="${it.qty || 1}"></span>
+      ${it.mode ? `<span class="cs-pill">${esc(it.mode)}</span>` : ''}
       ${it.accuracy ? `<span class="cs-pill">Acc ${it.accuracy >= 0 ? '+' : ''}${it.accuracy}</span>` : ''}
-      ${it.traits ? `<span class="cs-pill" style="color:var(--color-muted)">${esc(it.traits)}</span>` : ''}
+      ${it.traits ? `<span class="cs-pill cs-pill-mute">${esc(it.traits)}</span>` : ''}
       <button type="button" class="cs-roll-link" data-delitem="${i}" style="margin-left:auto;color:var(--color-nonogl)">remove</button>
-    </div></div>`).join('') || '<div class="cs-eq"><span class="gov">No equipment yet.</span></div>';
+    </div>
+    ${it.bulkFormula ? `<div class="cs-f">Bulk from "${esc(it.bulkFormula)}" at Tier ${esc(char.tier)}, Height ${esc(char.height)} m</div>` : ''}
+    <input class="cs-input cs-note-in" data-inote="${i}" value="${esc(it.note || '')}" placeholder="note — enchantment, quirk, GM ruling…">
+    </div>`).join('') || '<div class="cs-eq"><span class="cs-f cs-empty">No equipment yet.</span></div>';
   return `<div class="card" id="cs-items">${rows}</div>
     <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:flex-start">
       <div style="position:relative;flex:1">
@@ -227,7 +233,9 @@ function render() {
     <div class="cs-eyebrow">Identity</div>
     <div class="cs-grid" style="grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))">
       <div class="cs-field"><label>Tier</label><select class="cs-select" data-f="tier">${[1, 2, 3].map((t) => `<option value="${t}" ${char.tier == t ? 'selected' : ''}>Tier ${t}</option>`).join('')}</select></div>
+      <div class="cs-field"><label>Height (m)</label><input class="cs-input num" type="number" step="0.05" data-f="height" value="${char.height}"></div>
       <div class="cs-field"><label>Archetype</label><select class="cs-select" data-ref="archetype" data-f="archetype"><option value="">—</option></select></div>
+      <div class="cs-field"><label>Fixation (replaces archetype)</label><select class="cs-select" data-ref="fixation" data-f="fixation"><option value="">—</option></select></div>
       <div class="cs-field"><label>Background</label><select class="cs-select" data-ref="background" data-f="background"><option value="">—</option></select></div>
       <div class="cs-field"><label>Money</label><input class="cs-input num" type="number" data-f="money" value="${char.money}"></div>
     </div>
@@ -264,9 +272,9 @@ function bind() {
     el.addEventListener('input', () => {
       const f = (el as HTMLElement).dataset.f!;
       const v = (el as HTMLInputElement).value;
-      char[f] = ['tier', 'money'].includes(f) ? Number(v) || 0 : (v || (f === 'archetype' || f === 'background' ? null : ''));
+      char[f] = ['tier', 'money', 'height'].includes(f) ? Number(v) || 0 : (v || (['archetype', 'fixation', 'background'].includes(f) ? null : ''));
       markDirty();
-      if (f === 'tier') { reRenderAbilities(); reRenderSkills(); reRenderDisc(); refreshXpTotals(); }
+      if (f === 'tier' || f === 'height') { reRenderAbilities(); reRenderSkills(); reRenderDisc(); reRenderItems(); refreshXpTotals(); }
     }));
   const view = document.getElementById('cs-view') as HTMLAnchorElement;
   view.addEventListener('click', async (e) => { e.preventDefault(); await save(); if (id) location.href = `/characters/sheet?c=${id}`; });
@@ -343,8 +351,8 @@ function bindItems() {
     el.addEventListener('click', () => { char.items.splice(Number((el as HTMLElement).dataset.delitem), 1); markDirty(); reRenderItems(); }));
   document.querySelectorAll('[data-equip]').forEach((el) =>
     el.addEventListener('change', () => { char.items[Number((el as HTMLElement).dataset.equip)].equipped = (el as HTMLInputElement).checked; markDirty(); }));
-  document.querySelectorAll('[data-dtplus]').forEach((el) =>
-    el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.dtplus)].dtPlus = Number((el as HTMLInputElement).value) || 0; markDirty(); }));
+  document.querySelectorAll('[data-inote]').forEach((el) =>
+    el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.inote)].note = (el as HTMLInputElement).value; markDirty(); }));
   document.querySelectorAll('[data-bulk]').forEach((el) =>
     el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.bulk)].bulk = Number((el as HTMLInputElement).value) || 0; markDirty(); }));
   document.querySelectorAll('[data-qty]').forEach((el) =>
@@ -353,23 +361,29 @@ function bindItems() {
     el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.iname)].name = (el as HTMLInputElement).value; markDirty(); }));
   document.getElementById('cs-additem')?.addEventListener('click', () => {
     char.items.push({
-      id: crypto.randomUUID(), kind: 'generic', refSlug: null, name: 'New item', bulk: 0, tier: null, qty: 1,
-      equipped: false, dtPlus: 0, accuracy: 0, traits: '', damage: '', durability: '', notches: 0,
-      movement_penalty: '', rating: '', activation: '', pattern: '', effects: '',
+      id: crypto.randomUUID(), kind: 'generic', refSlug: null, name: 'New item', bulk: 0, bulkFormula: '',
+      tier: null, qty: 1, equipped: false, accuracy: 0, mode: '', weapon_group: '',
+      traits: '', damage: '', durability: '', notches: 0,
+      movement_penalty: '', rating: '', activation: '', pattern: '', effects: '', note: '',
     });
     markDirty(); reRenderItems();
   });
   wireSearch('cs-item-search', 'cs-item-res', EQUIP_KINDS, (rec) => {
     const st = rec.stat || {};
+    // Bulk is often a formula ("1/3", "T+3", "10+(5 times your Height)") — resolve it
+    // against this character's Tier and Height instead of stripping the digits out.
+    const b = parseBulk(st.bulk, Number(char.tier) || 1, Number(char.height) || 1.8);
     char.items.push({
       id: crypto.randomUUID(), kind: rec.kind, refSlug: rec.slug, name: rec.name,
-      bulk: Number(String(st.bulk).replace(/[^\d.-]/g, '')) || 0, tier: rec.tier ?? null, qty: 1,
-      equipped: rec.kind === 'armor', dtPlus: 0,
+      bulk: b.value, bulkFormula: b.formula, tier: rec.tier ?? null, qty: 1,
+      equipped: rec.kind === 'armor',
       accuracy: Number(String(st.accuracy).replace(/[^\d.-]/g, '')) || 0,
+      mode: st.mode || '', weapon_group: st.weapon_group || '',
       traits: st.traits || '', damage: '',
       durability: st.durability || st.durable || '', notches: 0,
       movement_penalty: st.movement_penalty || '', rating: st.rating || '',
       activation: st.activation || '', pattern: st.pattern || '', effects: st.effects || st.special || '',
+      note: '',
     });
     markDirty(); reRenderItems();
   });
