@@ -45,7 +45,7 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 | `cities` | 1 | battle_card (4), city_zone (33), structure (1) |
 | `conditions` | 1 | condition (15) |
 | `consumables` | 1 | consumable (11) |
-| `custom` | 1 | artifice (2) |
+| `custom` | 2 | artifice (17), consumable (1) |
 | `damage` | 1 | damage_type (13) |
 | `discipline` | 30 | activity (4), discipline (30), feat (200), pact (6), rune (36) |
 | `fixations` | 1 | fixation (5) |
@@ -65,12 +65,12 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 - **activity**: 41
 - **archetype**: 6
 - **armor**: 7
-- **artifice**: 44
+- **artifice**: 59
 - **background**: 6
 - **battle_card**: 16
 - **city_zone**: 33
 - **condition**: 15
-- **consumable**: 11
+- **consumable**: 12
 - **damage_type**: 13
 - **discipline**: 30
 - **feat**: 200
@@ -89,7 +89,7 @@ Each source file (matched by the first glob below, top to bottom) is handled by 
 - **weapon_group**: 8
 - **weapon_trait**: 13
 
-- **pages**: 67
+- **pages**: 68
 
 ## Where each kind is stored
 

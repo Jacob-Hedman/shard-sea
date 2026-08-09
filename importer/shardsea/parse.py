@@ -310,7 +310,12 @@ def handle_consumables(rel_path, raw, role, page):
 ARTIFICE_NAME = re.compile(r"^\*(?P<name>[A-Z][A-Za-z0-9 ,/&'\-]{0,45})\*(?:\s*\||\s*$)")
 
 
-def handle_artifice(rel_path, raw, role, page):
+def handle_artifice(rel_path, raw, role, page, require_pattern=True):
+    """Extract italic-name Artifice records. In the PHB chapter every item carries a
+    Runic `*Pattern*`, so that anchors detection. Player-authored custom items may be
+    pattern-less (e.g. found Relics), so `require_pattern=False` (used by parse_custom)
+    lets a bare `*Name*` line start a record on its own — safe because the custom file
+    is controlled and attribute lines like `*Bulk*:` never match ARTIFICE_NAME."""
     lines = raw.replace("\r\n", "\n").split("\n")
     n = len(lines)
 
@@ -324,7 +329,7 @@ def handle_artifice(rel_path, raw, role, page):
             section = re.sub(r"^#+\s*", "", h.group(2)).strip()
             continue
         m = ARTIFICE_NAME.match(line)
-        if m and ("*Pattern*" in line or pattern_near(i + 1)):
+        if m and (not require_pattern or "*Pattern*" in line or pattern_near(i + 1)):
             starts.append((i, m.group("name").strip(), section))
 
     out = []
@@ -805,7 +810,13 @@ def parse_custom(rel_path: str, raw: str, version: str) -> dict:
     page = build_page(rel_path, raw, "custom")
     page["title"] = "Custom Items"
     page["chapter"] = "Custom"
-    recs = handle_artifice(rel_path, raw, "artifice", page)
+    # Route by filename so custom/consumable.md parses as consumables, custom/weapon.md
+    # as weapons, etc. Everything else uses the pattern-relaxed Artifice handler.
+    stem = rel_path.rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()
+    if stem.startswith("consumable"):
+        recs = handle_consumables(rel_path, raw, "consumables", page)
+    else:
+        recs = handle_artifice(rel_path, raw, "artifice", page, require_pattern=False)
     for r in recs:
         made = r["attrs"].get("Made On") or r["attrs"].get("Made_On") or version
         status = (r["attrs"].get("Status") or "").strip().lower()

@@ -151,8 +151,20 @@ function exportKind(kind, build) {
   const index = [];
   for (const e of rows) {
     const rec = baseRec(e);
-    const { facets = {}, sub = '', desc, index: idxExtra = {} } = build(rec, e) || {};
-    // build() may override rec.content_type (e.g. custom artifice items).
+    let { facets = {}, sub = '', desc, index: idxExtra = {} } = build(rec, e) || {};
+    // build() may override rec.content_type (e.g. custom artifice items). For every
+    // OTHER kind, player-authored items from custom/*.md carry attrs.custom — tag them
+    // uniformly here so they all get the "Custom" badge, not just artifice. Idempotent:
+    // skips anything a build already marked custom.
+    if (rec.attrs?.custom && rec.content_type !== 'custom') {
+      rec.content_type = 'custom';
+      rec.custom = true;
+      rec.made_on = rec.attrs.made_on || '';
+      rec.outdated = (rec.attrs.status || '') === 'outdated';
+      facets = { ...facets, custom: rec.outdated ? ['Custom', 'Outdated'] : ['Custom'] };
+      const tag = rec.outdated ? 'custom · outdated' : 'custom';
+      sub = sub ? `${sub} · ${tag}` : tag;
+    }
     rec.facets = { ...provFacets(SOURCE), content_type: [rec.content_type], ...facets };
     full.push(rec);
     // carry a few item stats into the browse index so the character builder can
