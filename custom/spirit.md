@@ -1,7 +1,9 @@
-Player-authored custom Discipline — Spirit Binding. A newly-discovered Binding, distinct
-from Demon Binding: Spirit Binders make Pacts with the Spirits of the world, gaining Powers
-fuelled by Light. This lives outside the PHB and is tagged Custom. The Spirits are catalogued
-as their own kind; the Binder's Feats and Rites are attached to the Spirit Binding Discipline.
+Spirit Binding is a Discipline of the Anya Schools, distinct from Demon Binding. Its Binders
+make Pacts with the Spirits of the world — the Mitha and Akthe of the five Courts — gaining
+Powers fuelled by Light, a Resource held in Gems and drawn from Wellsprings in the Wilds.
+
+(Homebrew Discipline maintained by the group's GM. The Spirits are catalogued as their own
+kind; the Binder's Feats and Rites hang off the Spirit Binding Discipline.)
 
 #### Binding Spirits
 ****

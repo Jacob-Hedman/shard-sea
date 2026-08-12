@@ -31,12 +31,6 @@ const patterns = String(rec.pattern || '').split(/,\s*/).map((s: string) => s.tr
     )}
   </aside>
   <div class="min-w-0 space-y-5 lg:order-1">
-    {rec.custom && (
-      <div class="rounded-lg border border-arcane/40 bg-arcane/5 px-3.5 py-2.5 text-sm">
-        <span class="font-semibold text-arcane">Custom item.</span>
-        <span class="text-muted"> Made by a player against PHB {rec.made_on || '—'}{rec.outdated ? ' — flagged outdated (the current PHB has moved on; check it still fits).' : '.'} It lives outside the book, so it stays in the codex across PHB versions.</span>
-      </div>
-    )}
     {rec.description && <p class="text-[15px] leading-relaxed text-muted">{rec.description}</p>}
     {rec.effects && (
       <section>

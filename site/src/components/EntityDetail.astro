@@ -86,5 +86,11 @@ const inPage = rec.page_slug && rec.page_slug !== rec.slug ? { slug: rec.page_sl
       )}
     </div>
   </header>
+  {rec.custom && (
+    <div class="mb-6 rounded-lg border border-arcane/40 bg-arcane/5 px-3.5 py-2.5 text-sm">
+      <span class="font-semibold text-arcane">{rec.origin ? `${rec.origin} · Custom.` : 'Custom.'}</span>
+      <span class="text-muted"> {rec.origin ? `${rec.origin} content, added by the group's GM` : 'Added by the group’s GM'} against PHB {rec.made_on || '—'}{rec.outdated ? ' — flagged outdated (the current PHB has moved on; check it still fits).' : '.'} It lives outside the book, so it stays in the codex across PHB versions.</span>
+    </div>
+  )}
   <Body rec={rec} />
 </article>
