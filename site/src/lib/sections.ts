@@ -56,7 +56,8 @@ export const SECTIONS: Section[] = [
   { kind: 'rune', icon: 'ti-sparkles', route: 'runes', label: 'Runes', singular: 'Rune', group: 'Disciplines & Magic', blurb: 'Arcane runes a Mage can etch, grouped by class and tier.', facets: [f('rune_class', 'Class'), f('tier', 'Tier')], defaultSort: 'tier' },
   { kind: 'spells', type: 'pages', pageKey: 'spells', icon: 'ti-wand', route: 'spells', label: 'Spellcasting', singular: 'Spellcasting', group: 'Disciplines & Magic', blurb: 'How Mages channel Aether and form runes into spells.', facets: [] },
   { kind: 'ritual', icon: 'ti-flame', route: 'rituals', label: 'Rituals', singular: 'Ritual', group: 'Disciplines & Magic', blurb: 'Arcane rituals — runes, reagents, casting time and effect.', facets: [] },
-  { kind: 'pact', icon: 'ti-skull', route: 'bindings', label: 'Bindings', singular: 'Pact', group: 'Disciplines & Magic', blurb: 'Demonic pacts a Binder can swear — the Arch-Demons and their prices.', facets: [] },
+  { kind: 'pact', icon: 'ti-skull', route: 'bindings', label: 'Demon Bindings', singular: 'Demon Pact', group: 'Disciplines & Magic', blurb: 'Demonic pacts a Binder can swear — the Arch-Demons and their prices.', facets: [] },
+  { kind: 'spirit', icon: 'ti-ghost-2', route: 'spirits', label: 'Spirit Bindings', singular: 'Spirit', group: 'Disciplines & Magic', blurb: 'The Spirits a Binder can Pact with — by Court and rank, with their Powers.', facets: [f('court', 'Court'), f('rank', 'Rank')], defaultSort: 'name' },
 
   // ---- Equipment ----
   { kind: 'items-general', type: 'pages', pageKey: 'items-general', icon: 'ti-package', route: 'items', label: 'Items in General', singular: 'Item Rules', group: 'Equipment', blurb: 'How items work — hands, durability, repairs, traits and currency.', facets: [] },

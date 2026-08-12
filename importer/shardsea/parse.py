@@ -800,6 +800,152 @@ def parse_file(rel_path: str, raw: str) -> dict:
     return page
 
 
+# ---- Spirit Binding (custom Discipline): Spirits catalog + Binder feats + Rites ----
+SPIRIT_COURTS = {
+    "elemental spirits": "Elemental", "forces": "Force",
+    "memories": "Memory", "nymphs": "Nymph", "faeyer": "Faeyer",
+}
+_SP_NAME = re.compile(r"^(?P<pre>(?:Greater |Lesser )?[A-Za-z][A-Za-z' ]*?)\s*:\s*\*(?P<name>[^*]+?)\*\s*$")
+_SP_RANK = re.compile(r"^\*\*(Mitha|Akthe)\*\*\s*$")
+_SP_FEAT = re.compile(r"^Feat\s+(?P<num>\d+)\s*:\s*\*(?P<name>[^*]+?)\*")
+_SP_RITE = re.compile(r"^(?:General|Exclusive)\s+Activity\s*:\s*\*(?P<name>[^*]+?)\*")
+# a Power bullet: '- Active| *Gust*: `...`' / '- Passive| *X*: ...' / '- Innate| *Y*: ...'
+_SP_POWER = re.compile(r"^-\s*(?P<ptype>Active|Passive|Innate)[_0-9! ]*\s*[|:]\s*\*(?P<pname>[^*]+?)\*\s*:\s*(?P<peff>.+)$")
+_SP_ELEM = re.compile(r"^\*?Name\*?\s*:\s*\*?(?P<elem>[^*|]+?)\*?\s*$")
+
+
+def handle_spirits(rel_path, raw, role, page):
+    """Parse the custom Spirit Binding file into a Spirits catalog (kind 'spirit')
+    plus the Discipline itself: its Binder Feats (kind 'feat') and Rites (kind
+    'activity'), all sharing this source path so the exporter groups them under
+    the Spirit Binding discipline exactly like a PHB discipline."""
+    lines = raw.replace("\r\n", "\n").split("\n")
+    n = len(lines)
+    starts = []   # (idx, rtype, name, court, rank, num)
+    court = rank = ""
+    for i, line in enumerate(lines):
+        h = T.HEADING.match(line)
+        if h:
+            label = re.sub(r"^#+\s*", "", h.group(2)).strip().lower()
+            court = SPIRIT_COURTS.get(label, "")   # leaving a court section clears it
+            rank = ""
+            continue
+        rk = _SP_RANK.match(line)
+        if rk:
+            rank = rk.group(1)
+            continue
+        fm = _SP_FEAT.match(line)
+        if fm:
+            starts.append((i, "feat", fm.group("name").strip(), "", "", fm.group("num")))
+            continue
+        rm = _SP_RITE.match(line)
+        if rm:
+            starts.append((i, "rite", rm.group("name").strip(), "", "", None))
+            continue
+        if court:
+            sm = _SP_NAME.match(line)
+            if sm:
+                pre = sm.group("pre").strip()
+                r2 = "Akthe" if pre.lower().startswith("greater") else (rank or "Mitha")
+                starts.append((i, "spirit", sm.group("name").strip(), court, r2, None))
+    bounds = [s[0] for s in starts] + [n]
+
+    out = []
+    for idx, (i, rtype, name, court, rank, num) in enumerate(starts):
+        block = lines[i + 1:bounds[idx + 1]]
+        # cut the block at the next heading so it never bleeds into the next section
+        for k, bl in enumerate(block):
+            if T.HEADING.match(bl):
+                block = block[:k]
+                break
+        attrs, effects, flavor, desc, powers, bond = {}, [], "", [], [], ""
+        in_bond = False
+        for bl in block:
+            s = bl.strip()
+            if not s or T.HR_NOISE.match(s):
+                continue
+            pm = _SP_POWER.match(s)
+            if pm:
+                powers.append({"type": pm.group("ptype"), "name": pm.group("pname").strip(),
+                               "effect": T.strip_md(pm.group("peff")).strip()})
+                in_bond = False
+                continue
+            em = _SP_ELEM.match(s) if rtype == "spirit" else None
+            if em and "Name" not in attrs:
+                attrs["Name"] = em.group("elem").strip()
+                continue
+            if re.match(r"^\*Bond\*\s*$", s):
+                in_bond = True
+                continue
+            if re.match(r"^\*Powers\*\s*$", s):
+                in_bond = False
+                continue
+            q = T.QUOTE.match(s)
+            if q:
+                flavor = flavor or q.group(1).strip()
+                continue
+            if T.looks_like_attr_line(s):
+                for kk, vv in T.parse_attr_line(s):
+                    attrs[kk] = vv
+                continue
+            ticks = [t.strip() for t in T.BACKTICK.findall(bl)]
+            plain = T.strip_md(T.BACKTICK.sub(" ", bl)).strip()
+            if in_bond:
+                bond = (bond + " " + (ticks[0] if ticks else plain)).strip()
+                continue
+            if ticks:
+                effects.extend(ticks)
+            if plain:
+                desc.append(plain)
+
+        summary = flavor or (desc[0] if desc else "")
+        if rtype == "spirit":
+            power_lines = [f"{p['type']}| {p['name']}: {p['effect']}" for p in powers]
+            out.append(_entity(
+                "spirit", name, group=court, section=court, tier=None,
+                summary=summary, effects="\n".join(power_lines),
+                attrs={"court": court, "rank": rank, "spirit_name": attrs.get("Name", ""),
+                       "bond": bond, "powers": powers, "description": "\n".join(desc)},
+                raw="\n".join([lines[i]] + block).strip(), source=rel_path,
+            ))
+        elif rtype == "feat":
+            out.append(_entity(
+                "feat", name, group="Spirit Binding", tier=_int(num),
+                summary=flavor or (desc[0] if desc else ""),
+                effects="\n".join(effects) or "\n".join(desc),
+                attrs={**attrs, "Record": "Feat", "discipline_name": "Spirit Binding",
+                       "skill": "Spirit Binding", "feat_tier": _int(num),
+                       "description": "\n".join(desc)},
+                raw="\n".join([lines[i]] + block).strip(), source=rel_path,
+            ))
+        else:  # rite -> activity
+            out.append(_entity(
+                "activity", name, group="Spirit Binding", section="Spirit Binding",
+                summary=flavor or (desc[0] if desc else ""),
+                effects="\n".join(effects) or "\n".join(desc),
+                attrs={**attrs, "access": "Exclusive", "record_type": "Rite",
+                       "description": "\n".join(desc)},
+                raw="\n".join([lines[i]] + block).strip(), source=rel_path,
+            ))
+
+    # The Discipline itself, so the feats above group under it (exporter keys on source_path).
+    intro = T.first_paragraph(raw)
+    passive = ("Spirit Binders make Pacts with the Spirits of the world, gaining Powers fuelled by "
+               "Light (a Resource held in Gems). Limits: Lesser Spirits (Mitha) up to 2× your Training; "
+               "Passive Powers up to your Training; Power Tier up to 3× your Training. Greater Spirits "
+               "(Akthe) are Familiars, each with a Bond you must keep. The Rites of Binding, Enchantment "
+               "(Artifice via Light) and Rites (Rituals via Names) are gained with the Discipline. "
+               "Light costs 10 Gilt per Measure and is carried in Ampules — Sard (3), Onyx (6), "
+               "Sapphire (10), Emerald (30), Ruby (60), Diamond (100).")
+    out.append(_entity(
+        "discipline", "Spirit Binding", group="Spirit Binding", section="Spirit Binding",
+        summary=intro, effects=passive,
+        attrs={"skill": "Spirit Binding", "passive": passive, "description": intro},
+        raw="", source=rel_path,
+    ))
+    return out
+
+
 def parse_custom(rel_path: str, raw: str, version: str) -> dict:
     """Parse a player-authored custom-items file (same shape as the Artifice chapter).
 

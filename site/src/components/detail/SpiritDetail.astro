@@ -1,0 +1,63 @@
+---
+import StatBlock from '../StatBlock.astro';
+import Prose from '../Prose.astro';
+import { hrefFor } from '../../lib/sections';
+
+interface Props { rec: any; }
+const { rec } = Astro.props;
+const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+
+const powers: { type: string; name: string; effect: string }[] = Array.isArray(rec.powers) ? rec.powers : [];
+const TYPE_ORDER = ['Innate', 'Active', 'Passive'];
+const grouped = TYPE_ORDER
+  .map((t) => ({ type: t, items: powers.filter((p) => p.type === t) }))
+  .filter((g) => g.items.length);
+
+const TYPE_CLASS: Record<string, string> = {
+  Innate: 'border-gold/40 bg-gold/5 text-gold',
+  Active: 'border-ogl/40 bg-ogl/5 text-ogl',
+  Passive: 'border-line bg-surface text-muted',
+};
+
+const rows = [
+  { label: 'Court', value: rec.court },
+  { label: 'Rank', value: rec.rank },
+  rec.spirit_name && { label: 'Name', value: rec.spirit_name },
+].filter(Boolean) as { label: string; value: any }[];
+---
+
+<div class="lg:grid lg:grid-cols-[1fr_16rem] lg:gap-8">
+  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
+    <StatBlock rows={rows} />
+    <a href={hrefFor('discipline', 'spirit-binding')} class="inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
+      <i class="ti ti-arrow-left text-sm" aria-hidden="true"></i>Spirit Binding
+    </a>
+  </aside>
+  <div class="min-w-0 space-y-5 lg:order-1">
+    {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
+    {rec.bond && (
+      <section>
+        <h2 class={LABEL}>Bond</h2>
+        <blockquote class="border-l-2 border-gold/50 pl-3.5 text-[15px] italic leading-relaxed text-muted">
+          {rec.bond}
+        </blockquote>
+      </section>
+    )}
+    {grouped.length > 0 && (
+      <section>
+        <h2 class={LABEL}>Powers</h2>
+        <div class="space-y-2.5">
+          {grouped.map((g) => g.items.map((p) => (
+            <div class="rounded-lg border border-line bg-surface/50 p-3.5">
+              <div class="mb-1 flex items-center gap-2">
+                <span class={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${TYPE_CLASS[p.type] ?? TYPE_CLASS.Passive}`}>{p.type}</span>
+                <span class="font-semibold text-ink">{p.name}</span>
+              </div>
+              <Prose text={p.effect} />
+            </div>
+          )))}
+        </div>
+      </section>
+    )}
+  </div>
+</div>

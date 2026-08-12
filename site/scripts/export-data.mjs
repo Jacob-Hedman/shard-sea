@@ -403,6 +403,22 @@ exportKind('magic_item', (rec) => {
   };
 });
 
+// SPIRIT — the Spirits a Binder can Pact with (custom Spirit Binding discipline)
+exportKind('spirit', (rec) => {
+  rec.court = rec.attrs.court || rec.group || '';
+  rec.rank = rec.attrs.rank || '';
+  rec.spirit_name = rec.attrs.spirit_name || '';   // the element/aspect (Air, Death…)
+  rec.bond = rec.attrs.bond || '';
+  rec.powers = Array.isArray(rec.attrs.powers) ? rec.attrs.powers : [];
+  rec.description = rec.attrs.description || '';
+  return {
+    facets: { court: arr(rec.court), rank: arr(rec.rank) },
+    sub: [rec.court, rec.rank, rec.spirit_name && `Name: ${rec.spirit_name}`].filter(Boolean).join(' · '),
+    desc: rec.summary || rec.description,
+    index: { spirit_name: rec.spirit_name, court: rec.court, rank: rec.rank },
+  };
+});
+
 // CONDITION
 exportKind('condition', (rec, e) => {
   const t = typed.condition.get(e.id) || {};
