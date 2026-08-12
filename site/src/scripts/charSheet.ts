@@ -20,7 +20,7 @@ let ref: Record<string, any[]> = {};
 let artBox: HTMLDialogElement | null = null;
 let artEdit: HTMLDialogElement | null = null;
 
-const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'consumable', 'material'];
+const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'magic_item', 'martech', 'consumable', 'material'];
 const REF_KINDS = ['feat', 'threshold_feat', 'archetype', 'condition', 'action', 'skill', 'discipline',
   'background', 'fixation', ...EQUIP_KINDS];
 
@@ -570,7 +570,7 @@ function archHtml(c: any, d: any) {
 
 // ---- equipment ----------------------------------------------------------
 function equipHtml(d: any) {
-  const kindLabel: Record<string, string> = { weapon: 'Weapon', armor: 'Armor', artifice: 'Artifice', consumable: 'Consumable', material: 'Material', generic: 'Item' };
+  const kindLabel: Record<string, string> = { weapon: 'Weapon', armor: 'Armor', artifice: 'Artifice', magic_item: 'Magic Item', martech: 'Martech', consumable: 'Consumable', material: 'Material', generic: 'Item' };
   const order = ['weapon', 'armor', 'artifice', 'consumable', 'material', 'generic'];
   const kinds = Object.keys(d.byKind).sort((a, b) => {
     const ia = order.indexOf(a), ib = order.indexOf(b);

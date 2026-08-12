@@ -9,6 +9,30 @@ export interface SiteChange {
 
 export const siteChangelog: SiteChange[] = [
   {
+    date: '2026-08-12',
+    title: 'Homebrew content: Spirit Binding, Magic Items, Martech & more',
+    items: [
+      { tag: 'content', text: 'Spirit Binding — a whole new discipline: 43 Spirits across five Courts (Elemental, Forces, Memories, Nymphs, Faeyer), each Mitha or Akthe, with their Powers and Bonds, plus the Binder’s feats, Rites and Ampule prices. Browse them in the new Spirit Bindings section, next to the (now renamed) Demon Bindings.' },
+      { tag: 'content', text: 'Gaea Magic Items — a new section (magic that is not the work of Artifice): 27 items and 12 weapon/armor enchantments.' },
+      { tag: 'content', text: 'Martech — a new Equipment category next to Artifice: 20 cybernetic Moduli, Residue-fuelled body augmentations.' },
+      { tag: 'content', text: 'Utari firearms (Ou’kiju, Rokuju, Infantry Rifle, Kenju) added to Weapons, plus the earlier custom Artifice, Ordnance, Relics and a Poison — 124 homebrew entries in all.' },
+      { tag: 'feature', text: 'Faction tags: DM-made content now shows a coloured origin badge (Utari, Gaea…) alongside the Custom badge, and can be filtered by origin. Everything homebrew lives outside the PHB and survives future book imports.' },
+      { tag: 'feature', text: 'You can now add Magic Items and Martech to a character — the builder’s equipment search includes the new kinds.' },
+      { tag: 'fix', text: 'Damage Threshold again includes your equipped armor’s DT+ (a house rule the group’s sheet uses), so DT reads correctly (e.g. Body 10 + Dragon Armor 9 = 19).' },
+    ],
+  },
+  {
+    date: '2026-08-08',
+    title: 'Rules audit: corrected derived stats & clearer calculations',
+    items: [
+      { tag: 'fix', text: 'Encumbrance now actually reduces Movement and Initiative when you are over your limit (before, it only warned), and equipped armor’s Movement Penalty is applied.' },
+      { tag: 'fix', text: 'Damage Threshold and Strain Threshold are now labelled house rules (the PHB has neither); Corruption gained its fourth band, Terminal at 18.' },
+      { tag: 'feature', text: 'Added the PHB’s missing character values: Size & Weight, push/lift, the Climb/Swim Speeds, and your Defenses — the numbers an attacker must beat.' },
+      { tag: 'fix', text: 'Ability advances are never priced above your Tier, with a warning when you exceed the 6-per-Tier limit; equipment saved before a field existed now auto-heals from the codex on load.' },
+      { tag: 'feature', text: 'Every shown calculation reads as real arithmetic that ends in its result, and the +/- trackers read as controls rather than numbers.' },
+    ],
+  },
+  {
     date: '2026-08-07',
     title: 'Live play sheet, XP tracking & this split changelog',
     items: [

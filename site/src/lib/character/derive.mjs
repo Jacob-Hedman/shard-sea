@@ -109,6 +109,8 @@ export function derive(raw) {
   const armorNames = equippedArmor.map((i) => i.name).join(' + ');
   // Armor Movement Penalty is a real PHB stat (Cloth 0, Leather 1, Chain 3, Dragon 4).
   const armorMove = equippedArmor.reduce((s, i) => s + numFrom(i.movement_penalty), 0);
+  // Armor DT+ is a HOUSE stat (the group's sheet adds it to Damage Threshold).
+  const armorDtPlus = equippedArmor.reduce((s, i) => s + numFrom(i.dtPlus), 0);
 
   // --- encumbrance (needed before Movement/Initiative, which it penalises) ---
   // "all your Abilities and derived statistics fall by the same amount" — a derived
@@ -153,7 +155,9 @@ export function derive(raw) {
   // --- HOUSE RULE vitals (not PHB v17) — kept because the group's sheet used them ---
   const houseStVal = M + HOUSE_ST_BASE;
   const houseSt = ex(houseStVal, 'Mind + 3 (house rule)', [{ label: 'Mind', value: M }, { label: 'base', value: HOUSE_ST_BASE }]);
-  const houseDt = ex(B, 'Body (house rule)', [{ label: 'Body', value: B }]);
+  const houseDt = ex(B + armorDtPlus,
+    armorDtPlus ? 'Body + equipped armor DT+ (house rule)' : 'Body (house rule)',
+    [{ label: 'Body', value: B }, ...(armorDtPlus ? [{ label: armorNames || 'armor', value: armorDtPlus }] : [])]);
   const houseShakes = HOUSE_INJURY_STEPS.map((s) => ({ ...s, at: s.add === 0 ? `> ${houseStVal}` : houseStVal + s.add }));
 
   // --- skills ---

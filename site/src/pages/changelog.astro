@@ -21,6 +21,18 @@ const TAG_CLASS: Record<string, string> = {
   fix: 'border-nonogl/40 bg-nonogl/5 text-nonogl',
   content: 'border-ogl/40 bg-ogl/5 text-ogl',
 };
+
+// Homebrew content added to the codex OUTSIDE the PHB (from custom/*.md). Shown in the
+// book log because it expands the browsable game content — but it is NOT a PHB version
+// change, so it sits in its own clearly-marked block above the version diffs.
+const homebrew = [
+  { section: 'Spirit Bindings', route: '/spirits', n: 43, note: 'Spirits by Court & rank, with Powers & Bonds (+ the Spirit Binding discipline, feats & Rites)' },
+  { section: 'Magic Items — Gaea', route: '/magic-items', n: 39, note: 'arcane items & enchantments — magic that is not the work of Artifice' },
+  { section: 'Martech', route: '/martech', n: 20, note: 'cybernetic Moduli, Residue-fuelled body augmentations' },
+  { section: 'Artifice — custom', route: '/artifice', n: 17, note: 'Ordnance, Relics, Augmented Equipment & Magical Items' },
+  { section: 'Weapons — Utari', route: '/weapons', n: 4, note: 'firearms' },
+  { section: 'Consumables — custom', route: '/consumables', n: 1, note: 'a poison (Agony)' },
+];
 ---
 
 <Layout title="Changelog" description="What changed in each Kriegsmesser PHB version, and every update to this site.">
@@ -49,6 +61,23 @@ const TAG_CLASS: Record<string, string> = {
           ))}
         </div>
       )}
+
+      {/* Homebrew content — added by the group, outside any PHB version */}
+      <section class="rounded-lg border border-arcane/30 bg-arcane/5 p-4">
+        <div class="mb-1 flex flex-wrap items-baseline gap-x-2">
+          <h2 class="text-lg font-bold text-arcane">Homebrew content</h2>
+          <span class="text-xs text-faint">added by the group, outside any PHB version — carried across future book imports</span>
+        </div>
+        <ul class="mt-2 space-y-1.5">
+          {homebrew.map((h) => (
+            <li class="flex flex-wrap items-baseline gap-x-2 text-sm text-muted">
+              <a href={h.route} class="font-medium text-ink hover:text-gold">{h.section}</a>
+              <span class="font-mono text-xs text-ogl">+{h.n}</span>
+              <span class="text-faint">— {h.note}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {changelog.map((b: any) => {
         const isBaseline = (b.baseline?.length ?? 0) > 0 && !b.added?.length && !b.removed?.length && !b.modified?.length;

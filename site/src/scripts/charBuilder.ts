@@ -9,7 +9,7 @@ let id: string | null = null;
 let mount: HTMLElement;
 let saveTimer: any;
 const refCache: Record<string, any[]> = {};
-const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'consumable', 'material'];
+const EQUIP_KINDS = ['weapon', 'armor', 'artifice', 'magic_item', 'martech', 'consumable', 'material'];
 
 function newChar() {
   return {
@@ -181,7 +181,7 @@ function xpBlock() {
 }
 
 function itemsBlock() {
-  const kindLabel: Record<string, string> = { weapon: 'Weapon', armor: 'Armor', artifice: 'Artifice', consumable: 'Consumable', material: 'Material', generic: 'Item' };
+  const kindLabel: Record<string, string> = { weapon: 'Weapon', armor: 'Armor', artifice: 'Artifice', magic_item: 'Magic Item', martech: 'Martech', consumable: 'Consumable', material: 'Material', generic: 'Item' };
   const rows = char.items.map((it: any, i: number) => `
     <div class="cs-eq"><div class="et">
       <span class="ek">${kindLabel[it.kind] || it.kind}</span>
