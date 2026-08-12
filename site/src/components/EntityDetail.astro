@@ -55,6 +55,11 @@ const inPage = rec.page_slug && rec.page_slug !== rec.slug ? { slug: rec.page_sl
   <header class="mb-6 border-b border-line pb-5">
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <h1 class="text-3xl font-bold tracking-tight text-ink sm:text-4xl">{rec.name}</h1>
+      {rec.origin && (
+        <span class="inline-flex items-center gap-1 rounded-md border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gold">
+          <i class="ti ti-flag text-[13px]" aria-hidden="true"></i>{rec.origin}
+        </span>
+      )}
       {rec.custom && (
         <span class="inline-flex items-center gap-1 rounded-md border border-arcane/50 bg-arcane/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-arcane">
           <i class="ti ti-user-star text-[13px]" aria-hidden="true"></i>Custom

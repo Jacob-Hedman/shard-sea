@@ -82,6 +82,19 @@ CATALOG_SPECS: dict[str, dict] = {
         "prefixes": [r"Fixation"],
         "group_from": "Fixation",
     },
+    # ---- custom / homebrew catalogs (parsed from custom/*.md) ----
+    "martech": {
+        # cybernetic Moduli: 'Mod: **Name**' under '#### <System> Moduli' headings
+        "kind": "martech",
+        "prefixes": [r"Mod"],
+        "group_from": "group",     # #### Visual/Manual/Femoral/Dermal/Peripheral Moduli
+    },
+    "magic_items": {
+        # Gaea magic items + enchantments: 'Magic Item: **X**' / '<Type> Enchantment: **X**'
+        "kind": "magic_item",
+        "prefixes": [r"Magic Item", r"(?:[A-Za-z]+ )*Enchantment"],
+        "group_from": "section",   # #### Tier 1 Magical Items / #### Tier 1 Enchantments
+    },
 }
 
 # Longest prefix first so 'Ship Weapon:' isn't swallowed by 'Ship:'.

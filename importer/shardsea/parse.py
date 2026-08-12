@@ -811,10 +811,23 @@ def parse_custom(rel_path: str, raw: str, version: str) -> dict:
     page["title"] = "Custom Items"
     page["chapter"] = "Custom"
     # Route by filename so custom/consumable.md parses as consumables, custom/weapon.md
-    # as weapons, etc. Everything else uses the pattern-relaxed Artifice handler.
+    # as weapons, custom/martech.md as Martech, etc. Everything else uses the
+    # pattern-relaxed Artifice handler.
     stem = rel_path.rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()
+    # A file-level `Origin: <faction>` directive tags a whole faction file (Utari,
+    # Gaea, Martech…); an item may still override with its own `*Origin*:` attr.
+    mo = re.search(r"^\s*Origin:\s*(.+?)\s*$", raw, re.M)
+    file_origin = mo.group(1).strip() if mo else ""
     if stem.startswith("consumable"):
         recs = handle_consumables(rel_path, raw, "consumables", page)
+    elif stem.startswith("weapon"):
+        recs = [r for r in handle_items(rel_path, raw, "weapons", page) if r["kind"] == "weapon"]
+    elif stem.startswith("martech"):
+        recs = make_catalog_handler("martech")(rel_path, raw, "martech", page)
+    elif stem.startswith("magic"):
+        recs = make_catalog_handler("magic_items")(rel_path, raw, "magic_items", page)
+    elif stem.startswith("spirit"):
+        recs = handle_spirits(rel_path, raw, "spirit", page)
     else:
         recs = handle_artifice(rel_path, raw, "artifice", page, require_pattern=False)
     for r in recs:
@@ -822,6 +835,10 @@ def parse_custom(rel_path: str, raw: str, version: str) -> dict:
         status = (r["attrs"].get("Status") or "").strip().lower()
         if not status:
             status = "outdated" if made != version else "current"
-        r["attrs"].update({"custom": True, "made_on": made, "status": status})
+        upd = {"custom": True, "made_on": made, "status": status}
+        origin = r["attrs"].get("Origin") or file_origin
+        if origin:
+            upd["origin"] = origin
+        r["attrs"].update(upd)
     page["records"] = recs
     return page

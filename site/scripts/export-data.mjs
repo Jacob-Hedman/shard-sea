@@ -156,14 +156,22 @@ function exportKind(kind, build) {
     // OTHER kind, player-authored items from custom/*.md carry attrs.custom — tag them
     // uniformly here so they all get the "Custom" badge, not just artifice. Idempotent:
     // skips anything a build already marked custom.
-    if (rec.attrs?.custom && rec.content_type !== 'custom') {
-      rec.content_type = 'custom';
-      rec.custom = true;
-      rec.made_on = rec.attrs.made_on || '';
-      rec.outdated = (rec.attrs.status || '') === 'outdated';
-      facets = { ...facets, custom: rec.outdated ? ['Custom', 'Outdated'] : ['Custom'] };
-      const tag = rec.outdated ? 'custom · outdated' : 'custom';
-      sub = sub ? `${sub} · ${tag}` : tag;
+    if (rec.attrs?.custom) {
+      if (rec.content_type !== 'custom') {   // artifice self-tags; don't double it
+        rec.content_type = 'custom';
+        rec.custom = true;
+        rec.made_on = rec.attrs.made_on || '';
+        rec.outdated = (rec.attrs.status || '') === 'outdated';
+        facets = { ...facets, custom: rec.outdated ? ['Custom', 'Outdated'] : ['Custom'] };
+        const tag = rec.outdated ? 'custom · outdated' : 'custom';
+        sub = sub ? `${sub} · ${tag}` : tag;
+      }
+      // Faction/origin tag (Utari, Gaea…) shown alongside the Custom badge.
+      if (rec.attrs.origin) {
+        rec.origin = rec.attrs.origin;
+        facets = { ...facets, origin: [rec.origin] };
+        if (!String(sub).includes(rec.origin)) sub = sub ? `${rec.origin} · ${sub}` : rec.origin;
+      }
     }
     rec.facets = { ...provFacets(SOURCE), content_type: [rec.content_type], ...facets };
     full.push(rec);
@@ -180,6 +188,7 @@ function exportKind(kind, build) {
       sub, desc: snippet(desc ?? rec.summary ?? rec.effects),
       tier: rec.tier ?? null, stat, ...idxExtra,
       source: SOURCE, content_type: rec.content_type, license: LICENSE, facets: rec.facets,
+      ...(rec.origin ? { origin: rec.origin } : {}),
     });
   }
   emit(kind, full, index);
@@ -363,6 +372,34 @@ exportKind('artifice', (rec) => {
     facets: { category: arr(rec.category), custom: rec.custom ? ['Custom'] : [] },
     sub: [rec.category, rec.custom ? (rec.outdated ? 'custom · outdated' : 'custom') : ''].filter(Boolean).join(' · '),
     desc: rec.summary || rec.description || rec.effects,
+  };
+});
+
+// MARTECH — cybernetic Moduli (a custom category next to Artifice)
+exportKind('martech', (rec) => {
+  rec.cost = rec.attrs.Cost || '';
+  rec.bulk = rec.attrs.Bulk || '';
+  rec.category = rec.attrs.category || rec.group || 'Martech';
+  rec.description = rec.attrs.description || '';
+  return {
+    facets: { category: arr(rec.category) },
+    sub: [rec.category, rec.cost ? `Cost ${rec.cost}` : ''].filter(Boolean).join(' · '),
+    desc: rec.summary || rec.effects || rec.description,
+  };
+});
+
+// MAGIC ITEM — Gaea arcane items & enchantments (explicitly NOT Artifice)
+exportKind('magic_item', (rec) => {
+  rec.cost = rec.attrs.Cost || '';
+  rec.bulk = rec.attrs.Bulk || '';
+  rec.durability = rec.attrs.Durability || '';
+  rec.category = rec.attrs.category || rec.group || 'Magic Item';
+  rec.record_type = rec.attrs.record_type || '';   // 'Weapon Enchantment', etc.
+  rec.description = rec.attrs.description || '';
+  return {
+    facets: { category: arr(rec.category), type: rec.record_type ? [rec.record_type] : [] },
+    sub: [rec.record_type || rec.category, rec.cost ? `Cost ${rec.cost}` : ''].filter(Boolean).join(' · '),
+    desc: rec.summary || rec.effects || rec.description,
   };
 });
 
