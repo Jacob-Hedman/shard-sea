@@ -440,6 +440,7 @@ header.scrolled {
 .cs-feat { border-left: 2px solid #8a6f45; padding-left: 0.6rem; }
 .cs-feat + .cs-feat { margin-top: 0.4rem; }
 .cs-feat-thr { border-left-color: #8f8bdc; }
+.cs-feat-locked { border-left-style: dashed; opacity: 0.72; }
 .cs-feat-h { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
 .cs-panic { margin-top: 0.5rem; }
 .cs-panic-row { display: flex; gap: 0.4rem; align-items: baseline; font-size: 0.8rem; margin-top: 0.2rem; }

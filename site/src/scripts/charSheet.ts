@@ -440,7 +440,7 @@ function abilitiesHtml(d: any) {
       <div class="cs-lbl">${a.label}</div>
       <div class="val cs-num">${a.adjusted.value}</div><div class="bonus">+${a.bonusVal}</div>
       ${fLine(a.adjusted)}
-      <div class="cs-f">bonus <b>+${a.bonusVal}</b> = ⌊${a.adjusted.value} ÷ 6⌋ · natural ${a.natural}</div>
+      <div class="cs-f"><b>+${a.bonusVal}</b> to Skills = ⌊${a.adjusted.value} ÷ 6⌋${a.base !== a.adjusted.value ? ` · Threshold Feats use Base <b>${a.base}</b>` : ''}</div>
       <div class="cs-ab-ctl">
         <span class="cs-lbl cs-lbl-gold">Temp</span>
         ${stepBtns('data-atemp', k, [-1], a.label + ' temp')}<span class="cs-count">${a.temp >= 0 ? '+' : ''}${a.temp}</span>${stepBtns('data-atemp', k, [1], a.label + ' temp')}
@@ -525,14 +525,23 @@ function discHtml(d: any) {
 function thresholdHtml(d: any) {
   const out: string[] = [];
   for (const a of ['body', 'mind', 'reflex']) {
-    const val = d.ability[a].permanent;   // Threshold feats gate on the permanent score
+    const base = d.ability[a].base;               // Threshold FEATS gate on BASE alone…
+    const reached = d.ability[a].adjusted.value;  // …while the +Skill bonus uses the full (buffed) value
     for (const step of [6, 12, 18]) {
-      if (val >= step) {
-        const tf = (ref.threshold_feat || []).find((t: any) => (t.ability || '').toLowerCase() === a && Number(t.threshold) === step);
-        if (tf) out.push(`<div class="cs-feat cs-feat-thr">
-          <div class="cs-feat-h"><b>${tf.slug ? link('threshold_feat', tf.slug, tf.name) : esc(tf.name)}</b>
-            <span class="cs-pill">${cap(a)} ${step}</span></div>
+      const tf = (ref.threshold_feat || []).find((t: any) => (t.ability || '').toLowerCase() === a && Number(t.threshold) === step);
+      if (!tf) continue;
+      const name = tf.slug ? link('threshold_feat', tf.slug, tf.name) : esc(tf.name);
+      if (base >= step) {
+        out.push(`<div class="cs-feat cs-feat-thr">
+          <div class="cs-feat-h"><b>${name}</b> <span class="cs-pill">${cap(a)} ${step}</span></div>
           <div class="cs-f cs-eff">${esc(tf.effect || tf.desc || '')}</div></div>`);
+      } else if (reached >= step) {
+        // A permanent/temporary bonus pushed the value over this Threshold, but the FEAT
+        // needs Base — so it's shown locked (the Skill bonus still applies).
+        out.push(`<div class="cs-feat cs-feat-thr cs-feat-locked">
+          <div class="cs-feat-h"><b>${name}</b> <span class="cs-pill">${cap(a)} ${step}</span>
+            <span class="cs-pill cs-pill-mute">locked · needs Base ${step}</span></div>
+          <div class="cs-f cs-eff">Your ${cap(a)} reaches ${step} only with bonuses (Base <b>${base}</b>), so you gain the <b>+${d.ability[a].bonusVal}</b> Skill bonus but <b>not</b> this Feat.</div></div>`);
       }
     }
   }

@@ -91,7 +91,10 @@ export function derive(raw) {
     const adj = adjustedAbility(base, bonus, temp, strainPenalty, tax);
     ability[a] = {
       key: a, label: ABILITY_LABEL[a], base, bonus, temp, tax,
-      permanent: base + bonus,              // the "real" score threshold feats & Reserve gate on
+      // Threshold FEATS gate on BASE alone (permanent bonuses like Diablerie raise the
+      // value but never grant the Feat — PHB f-Ability Thresholds). The Ability BONUS to
+      // Skills and Reserve DO count the permanent bonus, so they read `permanent`.
+      permanent: base + bonus,              // the Ability-Bonus / Reserve score (bonuses count)
       natural: base + bonus,                // "Natural" = absent Strain and Taxation (PHB a_Health)
       adjusted: adj,
       bonusVal: abilityBonus(adj.value),
