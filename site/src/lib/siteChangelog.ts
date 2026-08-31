@@ -9,6 +9,16 @@ export interface SiteChange {
 
 export const siteChangelog: SiteChange[] = [
   {
+    date: '2026-08-31',
+    title: 'Updated to PHB v1.8',
+    items: [
+      { tag: 'content', text: 'The codex now tracks Kriegsmesser PHB v1.8. The Book versions tab has the full, detailed diff — every entry added, removed and changed — led by a Highlights summary of what’s new and what may affect your character (new DR:x mechanic, the Poisoned condition, the consumables overhaul, Brawling & Arcane reworks, and more).' },
+      { tag: 'content', text: 'Spirit Binding and the Gaea Magic Items graduated from homebrew to official book content in v1.8, so they lost their Custom/faction badges. Martech and the Utari firearms remain homebrew.' },
+      { tag: 'fix', text: 'Battle Cards retired — the tactical Battle system and Defending an Outpost rules left the book in v1.8 — and City Zones were replaced by the new City Districts generator (15 Districts with Requirements, Size & Effects).' },
+      { tag: 'fix', text: 'The character sheet was re-verified against v1.8: no derived formula changed, and it picks up the new Poisoned condition automatically.' },
+    ],
+  },
+  {
     date: '2026-08-12',
     title: 'Homebrew content: Spirit Binding, Magic Items, Martech & more',
     items: [

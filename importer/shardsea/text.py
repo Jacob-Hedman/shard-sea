@@ -86,6 +86,24 @@ def parse_attr_line(line: str) -> list[tuple[str, str]]:
     return pairs
 
 
+_BLOCKQUOTE = re.compile(r"^[ \t]*(?:>[ \t]?)+")
+
+
+def deblockquote(raw: str) -> str:
+    r"""Strip leading Markdown blockquote markers (`> `, `> > `) from every line.
+
+    PHB v1.8 reformatted the whole vault, replacing tab-indented sub-content
+    (`\t- item`, `\t*Key*: v`) with blockquotes (`> - item`, `> *Key*: v`). The
+    record grammar (ATTR_SEG / ITALIC_LABEL / QUOTE, all anchored at `^\s*\*`)
+    treats a leading `>` as content, so without this every blockquoted attribute,
+    flavor quote and sub-label would fail to parse and the `>` would leak into
+    rendered prose. Stripping the marker restores the v17 line shape, so records
+    that are genuinely unchanged diff clean across the version bump.
+    """
+    text = raw.replace("\r\n", "\n").replace("\r", "\n")
+    return "\n".join(_BLOCKQUOTE.sub("", line) for line in text.split("\n"))
+
+
 def close_backticks(line: str) -> str:
     """Repair an unterminated backtick (a recurring typo in this hand-authored
     vault — 11 such lines in v17). Without this the opening tick leaks into the

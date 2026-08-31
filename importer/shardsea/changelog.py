@@ -21,6 +21,13 @@ FIELD_LABEL = {
 }
 
 
+# Provenance/bookkeeping attrs that describe WHERE a record came from, not what it
+# does. Excluded from the diff so that e.g. a homebrew item becoming official PHB
+# content (custom→core, origin dropped) doesn't emit noise rows — only genuine
+# rules changes (Effect, Cost, Tier…) surface in the changelog.
+PROVENANCE_ATTRS = {"custom", "made on", "status", "origin", "outdated"}
+
+
 def _canonical(ent: dict) -> dict:
     """Flat dict of stable fields for diffing (attrs + typed cols folded in)."""
     d: dict[str, str] = {
@@ -31,6 +38,8 @@ def _canonical(ent: dict) -> dict:
         "effects": (ent.get("effects") or "").strip(),
     }
     for k, v in (ent.get("attrs") or {}).items():
+        if k.lower().replace("_", " ") in PROVENANCE_ATTRS:
+            continue
         d[f"attr:{k}"] = v
     typed = ent.get("typed")
     if typed:
@@ -48,7 +57,28 @@ def _sig(canon: dict) -> str:
 
 def _short(v) -> str:
     s = str(v).replace("\n", " ").strip()
-    return s if len(s) <= 160 else s[:157] + "..."
+    return s if len(s) <= 200 else s[:197] + "..."
+
+
+def _focus(ov, nv):
+    """Readable (old, new) snippets for a changed field.
+
+    Short values pass through verbatim. When BOTH values are long and share a
+    common leading run (a reworded clause deep inside an effect), that identical
+    head is collapsed to a leading ellipsis so the actual change stays visible
+    instead of being pushed past the truncation cap — this is what makes a PHB
+    "changed X to Y" row legible rather than "changed <long text> to <same long
+    text>"."""
+    a = None if ov is None else str(ov).replace("\n", " ").strip()
+    b = None if nv is None else str(nv).replace("\n", " ").strip()
+    if a is not None and b is not None and len(a) > 90 and len(b) > 90:
+        i, m = 0, min(len(a), len(b))
+        while i < m and a[i] == b[i]:
+            i += 1
+        i = max(0, i - 30)   # keep a little context before the divergence
+        if i > 8:
+            a, b = "…" + a[i:], "…" + b[i:]
+    return (None if a is None else _short(a), None if b is None else _short(b))
 
 
 def _field_label(key: str) -> str:
@@ -145,21 +175,20 @@ def diff_versions(conn: sqlite3.Connection, version: str) -> int:
             if ov == nv:
                 continue
             label = _field_label(f)
-            dedupe_key = (label, _short(ov) if ov is not None else None,
-                          _short(nv) if nv is not None else None)
+            fo, fn = _focus(ov, nv)   # collapse identical head on long text so the change shows
+            dedupe_key = (label, fo, fn)
             if dedupe_key in seen:
                 continue
             seen.add(dedupe_key)
             seq += 1
             if ov is None:
-                summ = f"{name}: {label} set to “{_short(nv)}”."
+                summ = f"{name}: {label} set to “{fn}”."
             elif nv is None:
-                summ = f"{name}: {label} removed (was “{_short(ov)}”)."
+                summ = f"{name}: {label} removed (was “{fo}”)."
             else:
-                summ = f"{name}: {label} changed from “{_short(ov)}” to “{_short(nv)}”."
+                summ = f"{name}: {label} changed from “{fo}” to “{fn}”."
             entries.append((prev, version, kind, slug, name, "modified", label,
-                            _short(ov) if ov is not None else None,
-                            _short(nv) if nv is not None else None, summ, seq))
+                            fo, fn, summ, seq))
 
     conn.executemany(
         """INSERT INTO change_entry

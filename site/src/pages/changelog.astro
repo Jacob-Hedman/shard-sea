@@ -25,14 +25,33 @@ const TAG_CLASS: Record<string, string> = {
 // Homebrew content added to the codex OUTSIDE the PHB (from custom/*.md). Shown in the
 // book log because it expands the browsable game content — but it is NOT a PHB version
 // change, so it sits in its own clearly-marked block above the version diffs.
+// NB: Spirit Binding and the Gaea Magic Items began here as homebrew and became official
+// in PHB v1.8 — they now live in the book (see the v18 highlights), not this list.
 const homebrew = [
-  { section: 'Spirit Bindings', route: '/spirits', n: 43, note: 'Spirits by Court & rank, with Powers & Bonds (+ the Spirit Binding discipline, feats & Rites)' },
-  { section: 'Magic Items — Gaea', route: '/magic-items', n: 39, note: 'arcane items & enchantments — magic that is not the work of Artifice' },
   { section: 'Martech', route: '/martech', n: 20, note: 'cybernetic Moduli, Residue-fuelled body augmentations' },
   { section: 'Artifice — custom', route: '/artifice', n: 17, note: 'Ordnance, Relics, Augmented Equipment & Magical Items' },
   { section: 'Weapons — Utari', route: '/weapons', n: 4, note: 'firearms' },
   { section: 'Consumables — custom', route: '/consumables', n: 1, note: 'a poison (Agony)' },
 ];
+
+// Curated, player-facing highlights for a book version — the "what's new / does this
+// affect my character?" summary that sits above the exhaustive auto-generated diff.
+// Keyed by version_to. Tags reuse the site chip styles (feature = new rule/mechanic,
+// content = new browsable content, fix = a change or rebalance to existing rules).
+const bookHighlights: Record<string, { tag: 'feature' | 'fix' | 'content'; text: string }[]> = {
+  v18: [
+    { tag: 'feature', text: 'New mechanic — Damage Reduction (DR:x): a Creature or item with DR related to a Damage Type ignores any instance of it that is x or less. It is now used across the book — ship armor, the Lesser Rings, Brawling — and the new Penetration weapon Trait can bypass it.' },
+    { tag: 'content', text: 'New condition — Poisoned: you suffer one Standard Strain at the start of each of your turns. It is applied on the sheet like any other condition, and the reworked Deadly substances now inflict it.' },
+    { tag: 'fix', text: 'Consumables overhauled. Addictive now makes you roll x Chaos Dice and become Addicted if you roll more 6s than your Mind Bonus. Deadly now rolls x−Height dice — each 6 Poisons you, and you die on more 6s than three times your Body Bonus — and every substance’s Deadly value was rescaled DOWN (e.g. Diablerie 17→7, Fury 10→1, Silvertongue’s poison Deadly 6→3). Secondary durations were dropped (Active_x/y → Active_x). Re-check any consumables your character carries.' },
+    { tag: 'fix', text: 'Brawling reworked. “Square Up” now grants DR:1_Physical and lets you Block with a free hand (reducing Damage by your Tier) instead of trading Vicious; the “Combo” flurry now deals only 1 Damage per extra Strike (Pivot Kicks & Pile Drivers exempt).' },
+    { tag: 'fix', text: 'Arcane Magic — the Aether-from-Strain feat now costs Corruption to gain (your Tier)d6 Aether (was Standard Strain for double the amount), and it dissipates after one Round. Two Spells were buffed (the Voltaic arc now deals T Damage; the teleport Spell links 1+T Spaces).' },
+    { tag: 'fix', text: 'Cities rebuilt. The old zone list is replaced by a City District generator — 15 Districts (Center, Market, Temple, Walls, Nobility, Sewer…), each with its Requirements, Size and Effects — and a City’s Tier is now the sum of its Stat Bonuses. Browse them under City Districts.' },
+    { tag: 'fix', text: 'Removed — the tactical Battle system (Unit & Commander cards) and the Defending an Outpost rules are gone from the book; the Battle Cards section is retired.' },
+    { tag: 'content', text: 'Now official — the Gaea Magic Items (39) and the whole Spirit Binding discipline (43 Spirits across five Courts) are core PHB v1.8 content. Their custom/faction badges are gone and their wording was polished; see the Changed list below for every reworded effect.' },
+    { tag: 'content', text: 'Also new — the Quarterstaff weapon; the Penetration and Delayed_x weapon Traits; explicit damage on every ship weapon; and ships now use DR:x instead of “Immunity to Blunted Damage”.' },
+    { tag: 'fix', text: 'Smaller changes worth knowing: social & animal-handling Chaos-die checks now shift on 1-3 (up) / 4-6 (down) instead of only 1 / 6; the Immutable archetype’s response now triggers on being Damaged (was Scraped); Crafting can’t exceed your Creation Tier; the Hull-Plating ship expansion was removed.' },
+  ],
+};
 ---
 
 <Layout title="Changelog" description="What changed in each Kriegsmesser PHB version, and every update to this site.">
@@ -100,6 +119,20 @@ const homebrew = [
                 </div>
               )}
             </div>
+
+            {!isBaseline && bookHighlights[b.version_to] && (
+              <div class="mb-6 rounded-lg border border-gold/25 bg-gold/5 p-4">
+                <h3 class="mb-2 text-sm font-semibold uppercase tracking-[0.08em] text-gold">Highlights — what’s new & what may affect your character</h3>
+                <ul class="space-y-2.5">
+                  {bookHighlights[b.version_to].map((h) => (
+                    <li class="flex gap-2.5 text-sm text-muted">
+                      <span class={`mt-0.5 h-fit shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${TAG_CLASS[h.tag]}`}>{h.tag === 'feature' ? 'new' : h.tag === 'content' ? 'content' : 'change'}</span>
+                      <span>{h.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {isBaseline ? (
               <div class="space-y-2">

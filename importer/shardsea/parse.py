@@ -569,6 +569,10 @@ CITY_ZONE = re.compile(
     r"^(?:(?P<region>Interior|Corpus|Boundary|Exterior|Unique)\s+)?"
     r"(?P<cls>Structure|Zone|Unit)\s*(?P<tier>\d+)?\s*:\s*\*+(?P<name>[^*]+?)\*+\s*$")
 
+# v1.8: Cities are generated from Districts — '**Center**: (No Requirements)',
+# '**Temple**: (Requires Tier_2)' — each with *Size*/*Effects* and roll/tier bullets.
+DISTRICT = re.compile(r"^\*\*(?P<name>[A-Z][^*]+?)\*\*\s*:\s*\((?P<req>[^)]*)\)")
+
 
 def handle_cities(rel_path, raw, role, page):
     """a_Cities.md lists each Spoke's zones as `Interior Structure 0: *Longhouse*`
@@ -626,6 +630,39 @@ def handle_cities(rel_path, raw, role, page):
                            "description": " ".join(desc)},
             raw="\n".join(lines[i:end]).strip(), source=rel_path,
         ))
+
+    # v1.8 District generator: '**Center**: (No Requirements)' + *Size*/*Effects* + bullets.
+    dsec = re.search(r"####\s*Generating City Districts(.*?)(?=\n####\s|\Z)", raw, re.S)
+    if dsec:
+        dlines = dsec.group(1).split("\n")
+        dstarts = [(k, dm) for k, dl in enumerate(dlines) if (dm := DISTRICT.match(dl.strip()))]
+        for idx, (k, dm) in enumerate(dstarts):
+            end = dstarts[idx + 1][0] if idx + 1 < len(dstarts) else len(dlines)
+            attrs, effects, desc = {}, [], []
+            for bl in dlines[k + 1:end]:
+                bl = T.close_backticks(bl)
+                s = bl.strip()
+                if not s or T.HR_NOISE.match(s):
+                    continue
+                if T.looks_like_attr_line(s):
+                    for kk, vv in T.parse_attr_line(s):
+                        attrs[kk] = vv
+                    continue
+                ticks = [t.strip() for t in T.BACKTICK.findall(bl)]
+                plain = T.strip_md(T.BACKTICK.sub(" ", bl)).strip()
+                if ticks:
+                    effects.extend(ticks)
+                if plain:
+                    desc.append(plain)
+            req = (dm.group("req") or "").strip()
+            out.append(_entity(
+                "city_zone", dm.group("name").strip(), group="District",
+                summary=(attrs.get("Effects") or " ".join(desc))[:400],
+                effects="\n".join(effects),
+                attrs={**attrs, "requires": req, "class": "District", "region": "District",
+                       "description": " ".join(desc)},
+                raw="\n".join(dlines[k:end]).strip(), source=rel_path,
+            ))
     return out
 
 
@@ -675,9 +712,11 @@ def handle_residue(rel_path, raw, role, page):
             attrs=r["attrs"] | {"description": desc},
             raw=r["raw"], source=rel_path,
         ))
-    # Elemental Residues are an indented sub-catalog: `*Aether*| *Value*: ...`
+    # Elemental Residues are a sub-catalog under Elemental Residue: `*Aether*| *Value*: ...`
+    # (indented with a tab pre-v1.8; at column 0 after v1.8's blockquote reformat is normalized —
+    # so match with optional leading whitespace and end each body at the next `*Element*|` line).
     for m in re.finditer(
-            r"^\s+\*(?P<name>[A-Z][A-Za-z]+)\*\s*\|\s*\*Value\*\s*:\s*(?P<value>.+?)$(?P<body>(?:\n(?!\s+\*[A-Z][A-Za-z]+\*\s*\|).*)*)",
+            r"^[ \t]*\*(?P<name>[A-Z][A-Za-z]+)\*\s*\|\s*\*Value\*\s*:\s*(?P<value>.+?)$(?P<body>(?:\n(?![ \t]*\*[A-Z][A-Za-z]+\*\s*\|).*)*)",
             raw, re.M):
         name = m.group("name").strip()
         value = T.strip_md(m.group("value")).strip()
@@ -712,11 +751,13 @@ def handle_resources(rel_path, raw, role, page):
                 attrs={"Value per Bulk": values.get(name, ""), "examples": T.strip_md(m.group("d")).strip()},
                 raw=m.group(0).strip(), source=rel_path,
             ))
-    # unique resources: '- **Caeline**: ...' followed by '  - *Value*: 1,600'
+    # unique resources: '- **Caeline**: ...' followed by a '- *Value*: 1,600' sub-line
+    # (indented pre-v1.8, column 0 after the blockquote reformat — so the body runs to the
+    # next '- **Name**' record rather than keying on indentation).
     usec = re.search(r"\*\*Unique Resources\*\*(.*)\Z", raw, re.S)
     if usec:
         for m in re.finditer(
-                r"^-\s*\*\*(?P<n>[^*]+)\*\*\s*:\s*(?P<d>.+?)$(?P<body>(?:\n\s+-.*)*)",
+                r"^-\s*\*\*(?P<n>[^*]+)\*\*\s*:\s*(?P<d>.+?)$(?P<body>(?:\n(?!-\s*\*\*)[^\n]*)*)",
                 usec.group(1), re.M):
             name = m.group("n").strip()
             vm = re.search(r"\*Value\*\s*:\s*(.+?)\s*$", m.group("body") or "", re.M)
@@ -765,6 +806,7 @@ def parse_file(rel_path: str, raw: str) -> dict:
          discipline chapters, structures in both Cities and Building an Outpost —
          and so a future PHB that moves content still imports cleanly.
     """
+    raw = T.deblockquote(raw)   # v1.8 blockquoted the whole vault; normalize before parsing
     role, _desc = role_for(rel_path)
     page = build_page(rel_path, raw, role)
     records: list[dict] = []
@@ -946,6 +988,10 @@ def handle_spirits(rel_path, raw, role, page):
     return out
 
 
+# Spirit Binding is now a PHB Appendix chapter (v1.8), not just a custom file.
+HANDLERS["spirits"] = handle_spirits
+
+
 def parse_custom(rel_path: str, raw: str, version: str) -> dict:
     """Parse a player-authored custom-items file (same shape as the Artifice chapter).
 
@@ -953,6 +999,7 @@ def parse_custom(rel_path: str, raw: str, version: str) -> dict:
     PHB, so they are re-imported every time and never deleted — and are flagged
     `outdated` when the current PHB has moved past the version they were made on.
     """
+    raw = T.deblockquote(raw)   # custom files may use blockquotes too; normalize like the PHB
     page = build_page(rel_path, raw, "custom")
     page["title"] = "Custom Items"
     page["chapter"] = "Custom"
