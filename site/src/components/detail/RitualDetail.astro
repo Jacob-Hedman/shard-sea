@@ -1,22 +1,13 @@
 ---
 import Prose from '../Prose.astro';
-import StatBlock from '../StatBlock.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
-const rows = [
-  { label: 'Runes', value: rec.runes },
-  { label: 'Reagents', value: rec.reagents },
-  { label: 'Casting time', value: rec.time },
-];
+const LABEL = 'subh';
 ---
 
-<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
-  <aside class="mb-6 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
-    <StatBlock rows={rows} />
-  </aside>
-  <div class="min-w-0 space-y-5 lg:order-1">
+<div class="file-main">
+  <div class="min-w-0 space-y-5">
     {rec.summary && rec.summary !== rec.effects && (
       <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>
     )}
@@ -28,3 +19,6 @@ const rows = [
     )}
   </div>
 </div>
+<aside class="file-side">
+  <slot name="side" />
+</aside>

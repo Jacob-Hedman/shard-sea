@@ -4,7 +4,7 @@ import { hrefFor } from '../../lib/sections';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const LABEL = 'subh';
 const feats: any[] = rec.feats ?? [];
 const runes: any[] = rec.runes ?? [];
 // group runes by their tier group ("Tier 1 Runes", ...)
@@ -15,26 +15,8 @@ for (const r of runes) {
 }
 ---
 
-<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
-  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
-    <dl class="card px-4 py-1.5">
-      {rec.skill && (
-        <div class="stat-row"><dt>Skill</dt><dd class="text-ink">{rec.skill}</dd></div>
-      )}
-      <div class="stat-row"><dt>Feats</dt><dd class="text-ink">{feats.length}</dd></div>
-      {rec.is_special && (
-        <div class="stat-row"><dt>Kind</dt><dd class="text-gold">Special discipline</dd></div>
-      )}
-    </dl>
-    {rec.passive && (
-      <div>
-        <h2 class={LABEL}>Passive Effect</h2>
-        <Prose text={rec.passive} class="text-sm" />
-      </div>
-    )}
-  </aside>
-
-  <div class="min-w-0 space-y-6 lg:order-1">
+<div class="file-main">
+  <div class="min-w-0 space-y-6">
     {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
 
     {feats.length > 0 && (
@@ -74,3 +56,13 @@ for (const r of runes) {
     ))}
   </div>
 </div>
+<aside class="file-side">
+      {rec.passive && (
+        <div>
+          <h2 class={LABEL}>Passive Effect</h2>
+          <Prose text={rec.passive} class="text-sm" />
+        </div>
+      )}
+  
+  <slot name="side" />
+</aside>

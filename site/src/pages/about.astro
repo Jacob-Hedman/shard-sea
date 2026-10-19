@@ -4,13 +4,13 @@ import { loadMeta, loadChanges } from '../lib/data';
 
 const meta = loadMeta();
 const { versions } = loadChanges();
-const HEADING = 'mb-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted';
+const HEADING = 'h-mini';
 ---
 
 <Layout title="About" description="What the Shard-sea Codex is and how it stays in sync with the game.">
-  <div class="mx-auto max-w-4xl space-y-10">
+  <div class="rb-wrap mx-auto max-w-4xl space-y-10">
     <header>
-      <h1 class="text-3xl font-bold tracking-tight text-ink sm:text-4xl">About the Codex</h1>
+      <h1 class="board pg-h" data-t="About the Codex">About the Codex</h1>
       <p class="mt-2 text-sm text-faint">A reference for a game that keeps changing.</p>
     </header>
 

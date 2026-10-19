@@ -106,3 +106,18 @@ export function sectionsByGroup() {
     sections: SECTIONS.filter((s) => s.group === group && !s.hidden),
   }));
 }
+
+// Wayfinding (the D&D 3.5 Codex 1.0 scheme): every section has a two-digit file code and its
+// group a colour, shown as the square before section names and on entry files.
+export const GROUP_COLOR: Record<string, string> = {
+  Character: 'var(--color-wing-character)',
+  'Rules of Play': 'var(--color-wing-rules)',
+  'Disciplines & Magic': 'var(--color-wing-magic)',
+  Equipment: 'var(--color-wing-items)',
+  World: 'var(--color-wing-divine)',
+};
+const VISIBLE = SECTIONS.filter((s) => !s.hidden);
+export const sectionCode = (kind: string) => {
+  const i = VISIBLE.findIndex((s) => s.kind === kind);
+  return i < 0 ? '00' : String(i + 1).padStart(2, '0');
+};

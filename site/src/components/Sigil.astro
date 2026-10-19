@@ -1,0 +1,37 @@
+---
+// A sigil plate with its printed key: every mark on the plate is read off the entry's data
+// (src/lib/sigil.ts), and the key spells each one out, so nothing has to be clicked.
+// Hovering a zone lights its line in the key and the other way round (src/scripts/sigil.ts).
+import { sigilRow, plate, spec } from '../lib/sigil';
+
+interface Props {
+  rec: any;
+  /** Draw the strokes in when the page loads. */
+  inscribe?: boolean;
+  /** Plate only, no key. */
+  bare?: boolean;
+  id?: string;
+}
+const { rec, inscribe = true, bare = false, id } = Astro.props;
+const row = sigilRow(rec);
+const svg = plate(row);
+const reading = spec(row).reading;
+const zoneOf = (z: string) => (z === 'count' ? 'core' : z);
+---
+
+{
+  bare ? (
+    <Fragment set:html={svg} />
+  ) : (
+    <figure class="sigil" id={id} data-inscribe={inscribe ? '' : undefined}>
+      <Fragment set:html={svg} />
+      <figcaption>
+        <ol class="reading">
+          {reading.map((x: { zone: string; label: string }) => (
+            <li data-zone={zoneOf(x.zone)}>{x.label}</li>
+          ))}
+        </ol>
+      </figcaption>
+    </figure>
+  )
+}

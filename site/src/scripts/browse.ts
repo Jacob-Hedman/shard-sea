@@ -1,9 +1,13 @@
-// Client-side faceted browse/filter for a section listing page.
+// Client-side faceted browse/filter for a section listing page (the Codex ledger).
 // Reads /data/<kind>.index.json once and filters live: AND across categories,
-// OR within a category, plus free-text search. The UI is a compact chip-bar —
-// category dropdown buttons under the search, and removable active-filter chips.
-import { facetValueLabel, contentTypeBadge, titleCase } from '../lib/format';
+// OR within a category (AND for tag facets, see below), plus free-text search.
+// The UI is a form band of category buttons with drop-down menus, removable
+// active-filter chips, and results as numbered ledger rows.
+// Filters can be preset from the URL: /spells?school=Evocation&level=3&q=fire.
+import { facetValueLabel, tidyValue, titleCase } from '../lib/format';
 import { getExcluded, toggleExcluded } from './prefs';
+import { sync as syncCompare } from './compare';
+import { makeTextFilter, hayTokens } from '../lib/searchcore.js';
 
 interface Rec {
   id: number;
@@ -12,15 +16,16 @@ interface Rec {
   kind: string;
   sub?: string;
   desc?: string;
-  tier?: number | null;
   source: string;
   content_type: string;
   license: string;
+  tier?: number | null;
   facets: Record<string, string[]>;
 }
 interface FacetDef {
   field: string;
   label: string;
+  range?: boolean;
 }
 
 const PAGE = 60;
@@ -28,13 +33,8 @@ const esc = (s: any) =>
   String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 function skeleton(): string {
-  const card = `<div class="card flex flex-col gap-2 p-3.5">
-    <div class="skeleton h-4 w-2/3"></div>
-    <div class="skeleton h-2.5 w-1/3"></div>
-    <div class="skeleton mt-1 h-2.5 w-full"></div>
-    <div class="skeleton h-2.5 w-4/5"></div>
-  </div>`;
-  return Array.from({ length: 9 }, () => card).join('');
+  const row = `<tr class="sk"><td><div class="skeleton" style="height:14px;width:60%"></div><div class="skeleton" style="height:10px;width:35%;margin-top:6px"></div></td><td class="hide-sm"><div class="skeleton" style="height:10px;width:90%"></div></td><td class="hide-md"><div class="skeleton" style="height:10px;width:70%"></div></td></tr>`;
+  return Array.from({ length: 12 }, () => row).join('');
 }
 
 // Bound once on document (survives View-Transition re-inits of #browse): close
@@ -46,6 +46,7 @@ function bindGlobalClose() {
   const closeAll = () => {
     document.querySelectorAll('.cat-menu').forEach((m) => m.classList.add('hidden'));
     document.querySelectorAll('.cat-btn').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    document.querySelectorAll('.cat.is-open').forEach((c) => c.classList.remove('is-open'));
   };
   document.addEventListener('click', (e) => {
     const t = e.target as HTMLElement | null;
@@ -90,28 +91,23 @@ export async function initBrowse() {
   try {
     records = await (await fetch(`/data/${kind}.index.json`)).json();
   } catch {
-    resultsEl.innerHTML = `<p class="col-span-full py-12 text-center text-nonogl">Could not load data.</p>`;
+    resultsEl.innerHTML = `<tr><td class="empty" colspan="3">Could not load the index. Reload the page to try again.</td></tr>`;
     return;
   }
   records.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Sort control: default per section (tiered listings default to Tier ascending,
-  // T1 first). Hidden entirely when the kind has no tier data.
+  // Sort control (Shard-sea): tiered sections default to Tier ascending, T1 first; the
+  // control is hidden when the section has no tiers.
   const hasTiers = records.some((r) => r.tier != null);
   if (sortSel) {
-    if (!hasTiers) sortSel.classList.add('hidden');
+    if (!hasTiers) sortSel.closest('.sortbox')?.classList.add('hidden');
     else sortSel.value = defaultSort === 'tier' ? 'tier' : 'name';
   }
   function sortRecs(list: Rec[]): Rec[] {
-    const mode = (sortSel && !sortSel.classList.contains('hidden') ? sortSel.value : defaultSort);
+    const mode = sortSel && hasTiers ? sortSel.value : 'name';
     const byName = (a: Rec, b: Rec) => a.name.localeCompare(b.name);
-    if (mode === 'tier') {
-      return list.sort((a, b) => {
-        const ta = a.tier == null ? Infinity : a.tier;
-        const tb = b.tier == null ? Infinity : b.tier;
-        return ta - tb || byName(a, b);
-      });
-    }
+    if (mode === 'tier')
+      return list.sort((a, b) => (a.tier ?? Infinity) - (b.tier ?? Infinity) || byName(a, b));
     return list.sort(byName);
   }
 
@@ -127,9 +123,41 @@ export async function initBrowse() {
     }
   }
 
+  // Within one category, selecting several values NARROWS (AND / intersection)
+  // for tag-style facets — an entry must carry EVERY selected tag (e.g. a class
+  // tagged both "Dragon" and "Defense"). Facets whose values are alternatives
+  // (an entry has exactly one) can't AND — picking two would yield nothing — so
+  // those OR (either/or). FORCE_OR also keeps naturally multi-valued but
+  // list-like facets (a spell's classes/levels/school) as OR, since there the
+  // user means "any of these". AND is auto-enabled for a facet only when some
+  // entry actually carries more than one of its values (a genuine tag facet).
+  // Numeric range facets (min–max inputs) — declared in sections.ts.
+  const rangeFields = new Set(facetDefs.filter((d) => d.range).map((d) => d.field));
+  const bounds: Record<string, { min: number; max: number }> = {};
+  for (const field of rangeFields) {
+    let lo = Infinity, hi = -Infinity;
+    for (const r of records)
+      for (const v of r.facets[field] ?? []) {
+        const n = Number(v);
+        if (Number.isFinite(n)) { if (n < lo) lo = n; if (n > hi) hi = n; }
+      }
+    if (Number.isFinite(lo)) bounds[field] = { min: lo, max: hi };
+  }
+  const ranges: Record<string, { min?: number; max?: number }> = {};
+  const rangeActive = (f: string) => !!ranges[f] && (ranges[f].min != null || ranges[f].max != null);
+
+  const FORCE_OR = new Set(['level', 'class', 'school', 'type', 'subschool', 'applies_to']);
+  const andFields = new Set<string>();
+  for (const def of facetDefs) {
+    const f = def.field;
+    if (f === 'content_type' || FORCE_OR.has(f) || rangeFields.has(f)) continue;
+    if (records.some((r) => (r.facets[f]?.length ?? 0) > 1)) andFields.add(f);
+  }
+
   const selected: Record<string, Set<string>> = {};
   let page = 1;
   let filtered = records;
+  const recTokens = new WeakMap<Rec, string[]>(); // each row's searchable words, built on first search
 
   const numericish = (f: string) => /level$/.test(f);
   function sortedValues(field: string): [string, number][] {
@@ -139,31 +167,52 @@ export async function initBrowse() {
   }
 
   // ---- category dropdown buttons (content_type handled by the "Show" toggles)
-  const activeDefs = facetDefs.filter(
-    (d) => d.field !== 'content_type' && (facetValues[d.field]?.size ?? 0) > 0,
+  const activeDefs = facetDefs.filter((d) =>
+    d.field === 'content_type'
+      ? false
+      : d.range
+        ? bounds[d.field] && bounds[d.field].max > bounds[d.field].min
+        : (facetValues[d.field]?.size ?? 0) > 0,
   );
+  function rangeButton(def: FacetDef): string {
+    const b = bounds[def.field];
+    const inp = (cls: string, ph: number, lab: string) =>
+      `<label>${lab}<input type="number" inputmode="numeric" class="${cls}" data-field="${esc(def.field)}" placeholder="${ph}" /></label>`;
+    return `
+    <div class="cat" data-field="${esc(def.field)}">
+      <button type="button" class="cat-btn" aria-expanded="false">
+        <span class="cat-l">${esc(def.label)}</span><span class="cat-sel">Any</span>
+        <span class="cat-count hidden"></span><span class="chev" aria-hidden="true"></span>
+      </button>
+      <div class="cat-menu hidden">
+        <div class="range">${inp('range-min', b.min, 'From')}${inp('range-max', b.max, 'To')}</div>
+        <p class="range-note">Range ${b.min.toLocaleString()}–${b.max.toLocaleString()}</p>
+      </div>
+    </div>`;
+  }
   function catButton(def: FacetDef): string {
+    if (def.range) return rangeButton(def);
     const values = sortedValues(def.field);
     const many = values.length > 12;
     const rows = values
       .map(
         ([v, n]) => `
-        <label class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[13px] hover:bg-surface" data-val="${esc(v.toLowerCase())}">
-          <input type="checkbox" class="h-3.5 w-3.5 accent-gold" data-field="${esc(def.field)}" value="${esc(v)}" />
-          <span class="flex-1 truncate text-muted">${esc(facetValueLabel(def.field, v))}</span>
-          <span class="font-mono text-[10px] text-faint">${n}</span>
+        <label class="opt" data-val="${esc(v.toLowerCase())}">
+          <input type="checkbox" data-field="${esc(def.field)}" value="${esc(v)}" />
+          <span class="opt-l">${esc(facetValueLabel(def.field, v))}</span>
+          <span class="opt-n">${n}</span>
         </label>`,
       )
       .join('');
     return `
-    <div class="cat relative" data-field="${esc(def.field)}">
-      <button type="button" class="cat-btn flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-muted transition hover:border-line-strong hover:text-ink" aria-expanded="false">
-        ${esc(def.label)}<span class="cat-count hidden rounded bg-gold/15 px-1.5 text-[11px] font-medium text-gold"></span>
-        <i class="ti ti-chevron-down text-sm" aria-hidden="true"></i>
+    <div class="cat" data-field="${esc(def.field)}">
+      <button type="button" class="cat-btn" aria-expanded="false">
+        <span class="cat-l">${esc(def.label)}</span><span class="cat-sel">Any</span>
+        <span class="cat-count hidden"></span><span class="chev" aria-hidden="true"></span>
       </button>
-      <div class="cat-menu absolute left-0 z-30 mt-1 hidden w-64 max-w-[80vw] rounded-lg border border-line-strong bg-surface-2 p-2 shadow-xl shadow-black/40">
-        ${many ? `<input type="text" class="cat-filter mb-1.5 w-full rounded-md border border-line bg-base px-2 py-1 text-xs text-ink outline-none transition focus:border-line-strong placeholder:text-faint" placeholder="Filter ${esc(def.label.toLowerCase())}…" />` : ''}
-        <div class="cat-values max-h-64 space-y-px overflow-y-auto pr-1">${rows}</div>
+      <div class="cat-menu hidden">
+        ${many ? `<input type="text" class="cat-filter" placeholder="Filter ${esc(def.label.toLowerCase())}…" />` : ''}
+        <div class="cat-values">${rows}</div>
       </div>
     </div>`;
   }
@@ -172,15 +221,12 @@ export async function initBrowse() {
   const ctTypes = [...(facetValues['content_type']?.keys() ?? [])].filter((c) => c !== 'official');
   function ctBox(c: string): string {
     const on = contentVisible(c);
-    return `<label class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-faint transition hover:text-muted">
-      <input type="checkbox" class="ct-box h-3.5 w-3.5 accent-gold" data-ct="${esc(c)}" ${on ? 'checked' : ''}/>
-      Include ${esc(c)} content</label>`;
+    return `<label class="ctbox"><input type="checkbox" class="ct-box" data-ct="${esc(c)}" ${on ? 'checked' : ''}/> Include ${esc(c)}</label>`;
   }
-  const ctBlock = ctTypes.length
-    ? `<div class="ml-auto flex items-center gap-4">${ctTypes.map(ctBox).join('')}</div>`
-    : '';
+  const ctEl = document.getElementById('browse-ct');
+  if (ctEl) ctEl.innerHTML = ctTypes.map(ctBox).join('');
 
-  catsEl.innerHTML = activeDefs.map(catButton).join('') + ctBlock;
+  catsEl.innerHTML = activeDefs.map(catButton).join('');
 
   // ---- active filter chips + per-category selected counts
   function renderChips() {
@@ -190,65 +236,148 @@ export async function initBrowse() {
       if (!sel || !sel.size) continue;
       for (const v of sel)
         parts.push(`
-        <button type="button" class="chip inline-flex items-center gap-1 rounded-md border border-gold/40 bg-gold/10 px-2 py-0.5 text-[12px] text-gold-strong transition hover:bg-gold/20" data-field="${esc(def.field)}" data-val="${esc(v)}">
-          <span class="text-faint">${esc(def.label)}:</span> ${esc(facetValueLabel(def.field, v))}
-          <i class="ti ti-x text-[13px]" aria-hidden="true"></i>
+        <button type="button" class="chip" data-field="${esc(def.field)}" data-val="${esc(v)}" aria-label="Remove ${esc(def.label)}: ${esc(facetValueLabel(def.field, v))}">
+          ${facetValueLabel(def.field, v).startsWith(def.label) ? '' : `<span class="chip-k">${esc(def.label)}</span> `}${esc(facetValueLabel(def.field, v))}<span class="x" aria-hidden="true">×</span>
+        </button>`);
+    }
+    for (const def of facetDefs) {
+      if (!def.range || !rangeActive(def.field)) continue;
+      const { min, max } = ranges[def.field];
+      const txt = min != null && max != null ? `${min.toLocaleString()}–${max.toLocaleString()}`
+        : min != null ? `≥ ${min.toLocaleString()}` : `≤ ${max!.toLocaleString()}`;
+      parts.push(`
+        <button type="button" class="chip" data-range="${esc(def.field)}" aria-label="Remove ${esc(def.label)}: ${esc(txt)}">
+          <span class="chip-k">${esc(def.label)}</span> ${esc(txt)}<span class="x" aria-hidden="true">×</span>
         </button>`);
     }
     chipsEl.innerHTML = parts.length
       ? parts.join('') +
-        `<button type="button" id="browse-clear" class="ml-1 text-[12px] text-faint transition hover:text-gold">Clear all</button>`
+        `<button type="button" id="browse-clear" class="clear">Clear all</button>`
       : '';
     catsEl.querySelectorAll<HTMLElement>('.cat').forEach((cat) => {
-      const n = selected[cat.dataset.field!]?.size ?? 0;
+      const field = cat.dataset.field!;
+      const isRange = rangeFields.has(field);
+      const n = isRange ? (rangeActive(field) ? 1 : 0) : (selected[field]?.size ?? 0);
       const badge = cat.querySelector('.cat-count') as HTMLElement | null;
-      const btn = cat.querySelector('.cat-btn') as HTMLElement | null;
+      const selEl = cat.querySelector('.cat-sel') as HTMLElement | null;
       if (badge) {
-        badge.textContent = String(n);
+        badge.textContent = isRange ? '•' : String(n);
         badge.classList.toggle('hidden', n === 0);
       }
-      btn?.classList.toggle('text-ink', n > 0);
-      btn?.classList.toggle('border-gold/50', n > 0);
+      if (selEl) {
+        if (isRange) {
+          const rg = ranges[field];
+          selEl.textContent = n ? `${rg.min ?? '…'}–${rg.max ?? '…'}` : 'Any';
+        } else {
+          const def = facetDefs.find((d) => d.field === field)!;
+          const vals = [...(selected[field] ?? [])].map((v) => facetValueLabel(def.field, v));
+          selEl.textContent = vals.length ? vals.join(andFields.has(field) ? ' + ' : ', ') : 'Any';
+        }
+      }
+      cat.classList.toggle('is-set', n > 0);
     });
+    const nSet = catsEl.querySelectorAll('.cat.is-set').length;
+    const tgl = document.querySelector('[data-filters-toggle] .n');
+    if (tgl) tgl.textContent = nSet ? String(nSet) : '';
   }
 
-  // ---- result card
-  function pills(r: Rec): string {
-    let h = `<span class="rounded border border-line px-1.5 py-0.5 text-[10px] text-faint">${esc(r.source)}</span>`;
-    if (r.content_type && r.content_type !== 'official')
-      h += `<span class="rounded border px-1.5 py-0.5 text-[10px] ${contentTypeBadge(r.content_type)}">${esc(titleCase(r.content_type))}</span>`;
-    return h;
+  // ---- result row (the ledger)
+  const hl = (text: string, q: string) => {
+    const t = esc(text);
+    if (!q) return t;
+    const i = text.toLowerCase().indexOf(q);
+    if (i >= 0) return `${esc(text.slice(0, i))}<mark>${esc(text.slice(i, i + q.length))}</mark>${esc(text.slice(i + q.length))}`;
+    // several words (the search matches them in any order): mark where each one starts
+    const words = q.split(/\s+/).filter((w) => w.length > 1).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (!words.length) return t;
+    let out = '';
+    let last = 0;
+    for (const m of text.matchAll(new RegExp(`\\b(${words.join('|')})`, 'gi'))) {
+      out += `${esc(text.slice(last, m.index))}<mark>${esc(m[0])}</mark>`;
+      last = (m.index ?? 0) + m[0].length;
+    }
+    return out + esc(text.slice(last));
+  };
+  function row(r: Rec, n: number, q: string): string {
+    const ct = r.content_type && r.content_type !== 'official' ? ` <span class="tag ${r.content_type === 'custom' ? 'red' : r.content_type === 'homebrew' ? 'blue' : 'yel'}">${esc(titleCase(r.content_type))}</span>` : '';
+    const tr = r.tier != null ? `<span class="tier-n">T${r.tier}</span>` : '';
+    return `<tr${n <= 12 ? ` style="--i:${n}"` : ''}>
+      <td class="nm"><span class="n">${String(n).padStart(2, '0')}</span><a href="/${route}/${esc(r.slug)}">${hl(r.name, q)}</a>${ct}<button type="button" class="cmp-row" data-cmp data-cmp-k="${esc(r.kind)}" data-cmp-s="${esc(r.slug)}" data-cmp-n="${esc(r.name)}" data-cmp-h="/${route}/${esc(r.slug)}/" aria-pressed="false" title="Compare" aria-label="Compare ${esc(r.name)}">⇄</button>${r.sub ? `<span class="sub">${esc(tidyValue(r.sub))}</span>` : ''}</td>
+      <td class="ds hide-sm">${r.desc ? esc(r.desc) : '<span class="none">—</span>'}</td>
+      <td class="src hide-md">${tr}${esc(r.source)}</td>
+    </tr>`;
   }
-  function card(r: Rec): string {
-    return `<a href="/${route}/${esc(r.slug)}" class="card card-hover flex flex-col p-3.5">
-      <h3 class="font-medium leading-snug text-ink">${esc(r.name)}</h3>
-      ${r.sub ? `<p class="mt-0.5 text-xs text-faint">${esc(r.sub)}</p>` : ''}
-      ${r.desc ? `<p class="mt-1.5 line-clamp-2 text-[13px] leading-snug text-muted">${esc(r.desc)}</p>` : ''}
-      <div class="mt-auto flex flex-wrap items-center gap-1.5 pt-2.5">${pills(r)}</div>
-    </a>`;
+  // The count rolls from the last total to the new one in a few hard steps, like a counter
+  // (straight to the number under reduced motion or on the first render).
+  let shownCount = -1;
+  let tick = 0;
+  const still = matchMedia('(prefers-reduced-motion: reduce)');
+  function setCount(n: number) {
+    const write = (v: number) => (countEl.innerHTML = `<strong>${v.toLocaleString()}</strong> of ${records.length.toLocaleString()} filed`);
+    cancelAnimationFrame(tick);
+    countEl.removeAttribute('aria-busy');
+    const from = shownCount;
+    shownCount = n;
+    if (from < 0 || from === n || still.matches) return void write(n);
+    countEl.classList.remove('ticking');
+    void countEl.offsetWidth;
+    countEl.classList.add('ticking');
+    countEl.setAttribute('aria-busy', 'true'); // announce only the final number
+    const t0 = performance.now(), STEPS = 8, MS = 320;
+    const step = (t: number) => {
+      const p = Math.min(1, Math.max(0, Math.floor(((t - t0) / MS) * STEPS) / STEPS));
+      write(Math.round(from + (n - from) * p));
+      if (p < 1) tick = requestAnimationFrame(step);
+      else countEl.removeAttribute('aria-busy');
+    };
+    tick = requestAnimationFrame(step);
   }
   function render(reset: boolean) {
     if (reset) page = 1;
+    const q = qInput.value.trim().toLowerCase();
     const slice = filtered.slice(0, page * PAGE);
     resultsEl.innerHTML = slice.length
-      ? slice.map(card).join('')
-      : `<p class="col-span-full py-12 text-center text-faint">No matches. Try removing some filters.</p>`;
-    countEl.textContent = `${filtered.length.toLocaleString()} of ${records.length.toLocaleString()}`;
+      ? slice.map((r, i) => row(r, i + 1, q)).join('')
+      : `<tr><td class="empty" colspan="3">No entries match. Remove a filter, or <button type="button" class="lnk" data-clear-all>clear them all</button>.</td></tr>`;
+    // New results arrive in a short stepped stagger; "Show more" appends without it.
+    if (reset && shownCount >= 0) {
+      resultsEl.classList.remove('rows-in');
+      void resultsEl.offsetWidth;
+      resultsEl.classList.add('rows-in');
+    }
+    setCount(filtered.length);
+    syncCompare();
     moreBtn.classList.toggle('hidden', slice.length >= filtered.length);
+    moreBtn.textContent = `Show ${Math.min(PAGE, filtered.length - slice.length)} more`;
   }
   function apply() {
-    const q = qInput.value.trim().toLowerCase();
+    // every word, in any order; accents, apostrophes and plurals folded ("cure wounds",
+    // "bulls strength") — lib/searchcore.js, same rules as the search palette
+    const textOk = makeTextFilter(qInput.value);
     filtered = records.filter((r) => {
       if (!contentVisible(r.content_type)) return false;
-      if (q) {
-        const hay = `${r.name} ${r.sub ?? ''} ${r.desc ?? ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+      if (textOk) {
+        let hay = recTokens.get(r);
+        if (!hay) recTokens.set(r, (hay = hayTokens(`${r.name} ${r.sub ?? ''} ${r.desc ?? ''}`)));
+        if (!textOk(hay)) return false;
       }
       for (const field in selected) {
         const sel = selected[field];
         if (!sel.size) continue;
         const vals = r.facets[field] ?? [];
-        if (!vals.some((v) => sel.has(v))) return false;
+        if (andFields.has(field)) {
+          // AND: the entry must carry every selected tag
+          for (const v of sel) if (!vals.includes(v)) return false;
+        } else if (!vals.some((v) => sel.has(v))) {
+          // OR: the entry must carry at least one of the selected values
+          return false;
+        }
+      }
+      for (const field of rangeFields) {
+        if (!rangeActive(field)) continue;
+        const { min, max } = ranges[field];
+        const nums = (r.facets[field] ?? []).map(Number).filter((n) => !Number.isNaN(n));
+        if (!nums.some((v) => (min == null || v >= min) && (max == null || v <= max))) return false;
       }
       return true;
     });
@@ -260,6 +389,7 @@ export async function initBrowse() {
   function closeMenus() {
     catsEl.querySelectorAll('.cat-menu').forEach((m) => m.classList.add('hidden'));
     catsEl.querySelectorAll('.cat-btn').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    catsEl.querySelectorAll('.cat.is-open').forEach((c) => c.classList.remove('is-open'));
   }
   catsEl.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
@@ -271,6 +401,7 @@ export async function initBrowse() {
       if (willOpen) {
         menu.classList.remove('hidden');
         btn.setAttribute('aria-expanded', 'true');
+        btn.closest('.cat')?.classList.add('is-open');
         menu.querySelector<HTMLInputElement>('.cat-filter')?.focus();
       }
     }
@@ -298,6 +429,18 @@ export async function initBrowse() {
   });
   catsEl.addEventListener('input', (e) => {
     const inp = e.target as HTMLInputElement;
+    if (inp.classList.contains('range-min') || inp.classList.contains('range-max')) {
+      const field = inp.dataset.field!;
+      const rg = (ranges[field] ??= {});
+      const raw = inp.value.trim();
+      const num = raw === '' ? undefined : Number(raw);
+      const val = num == null || Number.isNaN(num) ? undefined : num;
+      if (inp.classList.contains('range-min')) rg.min = val;
+      else rg.max = val;
+      renderChips();
+      apply();
+      return;
+    }
     if (!inp.classList.contains('cat-filter')) return;
     const term = inp.value.trim().toLowerCase();
     inp.closest('.cat-menu')!
@@ -307,11 +450,27 @@ export async function initBrowse() {
       });
   });
 
+  resultsEl.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('[data-clear-all]')) (chipsEl.querySelector('#browse-clear') as HTMLElement | null)?.click();
+  });
   chipsEl.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('#browse-clear')) {
       for (const k in selected) selected[k].clear();
+      for (const k in ranges) delete ranges[k];
       catsEl.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((c) => (c.checked = false));
+      catsEl.querySelectorAll<HTMLInputElement>('.range-min, .range-max').forEach((c) => (c.value = ''));
+      renderChips();
+      apply();
+      return;
+    }
+    const rchip = t.closest('[data-range]') as HTMLElement | null;
+    if (rchip) {
+      const f = rchip.dataset.range!;
+      delete ranges[f];
+      catsEl
+        .querySelectorAll<HTMLInputElement>(`.range-min[data-field="${CSS.escape(f)}"], .range-max[data-field="${CSS.escape(f)}"]`)
+        .forEach((i) => (i.value = ''));
       renderChips();
       apply();
       return;
@@ -339,8 +498,25 @@ export async function initBrowse() {
     page++;
     render(false);
   });
+
+  // Presets from the URL (the home page's shortcuts link here with them).
+  const params = new URLSearchParams(location.search);
+  let preset = false;
+  for (const def of facetDefs) {
+    const raw = params.get(def.field);
+    if (!raw || def.range) continue;
+    for (const v of raw.split(',')) {
+      const cb = catsEl.querySelector<HTMLInputElement>(`input[data-field="${CSS.escape(def.field)}"][value="${CSS.escape(v)}"]`);
+      if (!cb) continue;
+      cb.checked = true;
+      (selected[def.field] ??= new Set()).add(v);
+      preset = true;
+    }
+  }
+  if (params.get('q')) { qInput.value = params.get('q')!; preset = true; }
+
   sortSel?.addEventListener('change', () => apply());
 
   renderChips();
-  apply(); // initial render honors the default sort
+  apply(); // the first render honours the default sort
 }

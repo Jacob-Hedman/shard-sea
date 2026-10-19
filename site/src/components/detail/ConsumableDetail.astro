@@ -1,34 +1,16 @@
 ---
 import Prose from '../Prose.astro';
-import StatBlock from '../StatBlock.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
-const rows = [
-  { label: 'Kind', value: rec.group },
-  { label: 'Cost', value: rec.cost },
-];
+const LABEL = 'subh';
 // The trait line ("Tier_1, Active_1 Hour/1 Day, Deadly_2 Edible") -> chips.
 const traits = String(rec.traits || '').split(/,\s*/).map((s: string) => s.trim()).filter(Boolean);
 const extra: Record<string, string> = rec.extra ?? {};
 ---
 
-<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
-  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
-    <StatBlock rows={rows} />
-    {traits.length > 0 && (
-      <div>
-        <h2 class={LABEL}>Traits</h2>
-        <div class="flex flex-wrap gap-1.5">
-          {traits.map((t: string) => (
-            <span class="rounded-md border border-line bg-surface px-2 py-1 font-mono text-xs text-muted">{t}</span>
-          ))}
-        </div>
-      </div>
-    )}
-  </aside>
-  <div class="min-w-0 space-y-5 lg:order-1">
+<div class="file-main">
+  <div class="min-w-0 space-y-5">
     {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
     {rec.effect && (
       <section>
@@ -44,3 +26,17 @@ const extra: Record<string, string> = rec.extra ?? {};
     ))}
   </div>
 </div>
+<aside class="file-side">
+      {traits.length > 0 && (
+        <div>
+          <h2 class={LABEL}>Traits</h2>
+          <div class="flex flex-wrap gap-1.5">
+            {traits.map((t: string) => (
+              <span class="rounded-md border border-line bg-surface px-2 py-1 font-mono text-xs text-muted">{t}</span>
+            ))}
+          </div>
+        </div>
+      )}
+  
+  <slot name="side" />
+</aside>

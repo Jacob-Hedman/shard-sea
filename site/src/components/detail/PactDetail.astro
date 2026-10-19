@@ -1,4 +1,5 @@
 ---
+import Icon from '../Icon.astro';
 import { renderMarkdown } from '../../lib/md';
 
 interface Props { rec: any; }
@@ -6,9 +7,10 @@ const { rec } = Astro.props;
 const html = renderMarkdown(rec.body_md || rec.effects);
 ---
 
+<div class="file-main">
 <div class="max-w-3xl space-y-5">
   <span class="inline-flex items-center gap-1 rounded-md border border-nonogl/40 bg-nonogl/5 px-2 py-0.5 text-[11px] font-medium text-nonogl">
-    <i class="ti ti-skull text-[13px]" aria-hidden="true"></i>Binding pact
+    <Icon name="skull" class="text-[13px]" />Binding pact
   </span>
   {rec.invocation && (
     <blockquote class="border-l-2 border-nonogl/50 pl-3.5 text-[15px] italic leading-relaxed text-muted">
@@ -17,3 +19,7 @@ const html = renderMarkdown(rec.body_md || rec.effects);
   )}
   {html && <div class="page-prose" set:html={html} />}
 </div>
+</div>
+<aside class="file-side">
+  <slot name="side" />
+</aside>

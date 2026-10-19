@@ -1,7 +1,8 @@
 ---
+import Icon from '../../components/Icon.astro';
 import Layout from '../../components/Layout.astro';
 import EntityDetail from '../../components/EntityDetail.astro';
-import { SECTIONS, sectionByRoute, allFacets, isPages } from '../../lib/sections';
+import { SECTIONS, sectionByRoute, allFacets, isPages, sectionCode, GROUP_COLOR } from '../../lib/sections';
 import { loadMeta, countFor, loadFull } from '../../lib/data';
 
 export function getStaticPaths() {
@@ -12,7 +13,7 @@ const route = Astro.params.section!;
 const section = sectionByRoute(route)!;
 const meta = loadMeta();
 
-// ---- prose ('pages') section: render the chapter(s) ----
+// ---- prose ('pages') section: the chapter itself, or its chapters as a ledger ----
 let prosePages: any[] = [];
 if (isPages(section)) {
   prosePages = (loadFull('page') as any[])
@@ -22,53 +23,46 @@ if (isPages(section)) {
 const single = isPages(section) && prosePages.length === 1 ? prosePages[0] : null;
 
 // ---- records section ----
-const count = countFor(meta, section.kind);
+const count = isPages(section) ? prosePages.length : countFor(meta, section.kind);
 const facets = allFacets(section);
 ---
 
-{isPages(section) ? (
-  <Layout title={single ? single.name : section.label} description={section.blurb}>
-    <div class="mx-auto max-w-6xl">
-      {single ? (
-        <EntityDetail rec={single} />
-      ) : (
-        <>
-          <header class="mb-5">
-            <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{section.label}</h1>
-            <p class="mt-1 text-sm text-muted">{section.blurb}</p>
-          </header>
-          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {prosePages.map((p) => (
-              <a href={`/pages/${p.slug}`} class="card card-hover flex flex-col p-4">
-                <h3 class="font-semibold leading-tight text-ink">{p.name}</h3>
-                {p.summary && <p class="mt-1.5 line-clamp-3 text-sm text-muted">{p.summary}</p>}
-              </a>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+{single ? (
+  <Layout title={single.name} description={section.blurb}>
+    <EntityDetail rec={single} />
   </Layout>
 ) : (
   <Layout title={section.label} description={section.blurb}>
-    <div class="mx-auto max-w-[80rem]">
-      <header class="mb-5">
-        <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 class="text-2xl font-bold tracking-tight text-ink sm:text-3xl">{section.label}</h1>
-          <span class="font-mono text-xs text-faint">{count.toLocaleString()} total</span>
-        </div>
-        <p class="mt-1 text-sm text-muted">{section.blurb}</p>
-        {section.rulesPage && (
-          <a
-            href={`/pages/${section.rulesPage.slug}`}
-            class="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-muted transition hover:border-gold/40 hover:text-gold"
-          >
-            <i class="ti ti-book-2 text-sm" aria-hidden="true"></i>{section.rulesPage.label}
-            <i class="ti ti-arrow-right text-xs" aria-hidden="true"></i>
-          </a>
-        )}
-      </header>
+    <section class="ledger-hd pad" style={`--c:${GROUP_COLOR[section.group]}`}>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Codex</a><span aria-hidden="true">/</span><span>{section.group}</span><span aria-hidden="true">/</span><span aria-current="page">{section.label}</span></nav>
+      <div class="ledger-title">
+        <span class="code">{sectionCode(section.kind)}</span>
+        <h1 class="board" data-t={section.label}>{section.label}</h1>
+        <span class="lbl">{count.toLocaleString('en-US')} filed</span>
+      </div>
+      <p class="blurb">{section.blurb}</p>
+      {section.rulesPage && (
+        <p class="blurb"><a class="lnk" href={`/pages/${section.rulesPage.slug}`}><Icon name="book-2" /> {section.rulesPage.label} →</a></p>
+      )}
+    </section>
 
+    {isPages(section) ? (
+      <div class="rbody">
+        <table class="ledger">
+          <caption class="sr-only">{section.label}</caption>
+          <thead><tr><th scope="col">Chapter</th><th scope="col" class="hide-sm">Summary</th><th scope="col" class="hide-md">Source</th></tr></thead>
+          <tbody>
+            {prosePages.map((p, i) => (
+              <tr>
+                <td class="nm"><span class="n">{String(i + 1).padStart(2, '0')}</span><a href={`/pages/${p.slug}`}>{p.name}</a>{p.chapter && <span class="sub">{p.chapter}</span>}</td>
+                <td class="ds hide-sm">{p.summary || <span class="none">—</span>}</td>
+                <td class="src hide-md">{p.source}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
       <div
         id="browse"
         data-kind={section.kind}
@@ -77,58 +71,53 @@ const facets = allFacets(section);
         data-default-sort={section.defaultSort ?? 'name'}
         data-default-include={section.defaultIncludeContent?.join(',') ?? ''}
       >
-        <div class="mb-5 space-y-3">
-          <div class="flex items-center gap-2.5">
-            <div class="relative min-w-0 flex-1">
-              <i class="ti ti-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint" aria-hidden="true"></i>
-              <input
-                id="browse-q"
-                type="text"
-                autocomplete="off"
-                placeholder={`Search ${section.label.toLowerCase()} by name…`}
-                class="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-line-strong placeholder:text-faint"
-              />
-            </div>
-            <select
-              id="browse-sort"
-              aria-label="Sort order"
-              class="shrink-0 rounded-lg border border-line bg-surface px-2.5 py-2 text-xs text-muted outline-none transition hover:border-line-strong focus:border-line-strong"
-            >
-              <option value="tier">Tier ↑</option>
-              <option value="name">A → Z</option>
-            </select>
-            <span id="browse-count" class="hidden whitespace-nowrap font-mono text-xs text-faint sm:block"></span>
+        <div class="qband">
+          <label class="qfield">
+            <Icon name="search" />
+            <input id="browse-q" type="search" autocomplete="off" spellcheck="false" placeholder={`Name a ${section.singular.toLowerCase()}, or part of one`} aria-label={`Search ${section.label.toLowerCase()} by name`} />
+          </label>
+          <div class="qmeta">
+            <span id="browse-count" class="rsum" aria-live="polite"></span>
+            <button type="button" class="tool mob" data-filters-toggle aria-expanded="false">Filters <span class="n"></span></button>
+            <div id="browse-chips" class="chips"></div>
+            <label class="sortbox lbl">Sort
+              <select id="browse-sort" aria-label="Sort order">
+                <option value="tier">Tier ↑</option>
+                <option value="name">A → Z</option>
+              </select>
+            </label>
+            <div id="browse-ct" class="cts"></div>
           </div>
-
-          <div id="browse-cats" class="flex flex-wrap items-center gap-2"></div>
-          <div id="browse-chips" class="flex flex-wrap items-center gap-1.5"></div>
-
-          <p class="text-xs text-faint">
-            Click a category to choose values, and combine categories to narrow results — remove any filter
-            with its <span class="text-gold">×</span>.
-          </p>
         </div>
+        <div id="browse-cats" class="formband" aria-label="Filters"></div>
 
-        <div id="browse-results" class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
-
-        <div class="mt-6 text-center">
-          <button
-            id="browse-more"
-            class="hidden rounded-lg border border-line bg-surface px-5 py-2 text-sm text-muted transition hover:border-line-strong hover:text-ink"
-          >
-            Load more
-          </button>
+        <div class="rbody">
+          <table class="ledger">
+            <caption class="sr-only">{section.label}, filtered by the form above</caption>
+            <thead><tr><th scope="col">Name</th><th scope="col" class="hide-sm">Summary</th><th scope="col" class="hide-md">Source</th></tr></thead>
+            <tbody id="browse-results"></tbody>
+          </table>
+          <button id="browse-more" type="button" class="btn more hidden">Show more</button>
         </div>
       </div>
+    )}
 
-      <noscript>
-        <p class="mt-6 text-muted">Filtering needs JavaScript. Press <kbd>/</kbd> to search by name instead.</p>
-      </noscript>
-    </div>
+    <noscript>
+      <p class="pad" style="padding-block:24px">Filtering needs JavaScript. Press <kbd>/</kbd> to search by name instead.</p>
+    </noscript>
 
     <script>
       import { initBrowse } from '../../scripts/browse';
+      // Runs on first load and after every View Transitions navigation; browse.ts
+      // guards against re-initialising the same #browse element.
       document.addEventListener('astro:page-load', initBrowse);
+      // Phones: the filter form folds away behind one button.
+      document.addEventListener('click', (e) => {
+        const b = (e.target as Element).closest('[data-filters-toggle]');
+        if (!b) return;
+        const open = document.getElementById('browse')?.classList.toggle('filters-open');
+        b.setAttribute('aria-expanded', String(!!open));
+      });
     </script>
   </Layout>
 )}

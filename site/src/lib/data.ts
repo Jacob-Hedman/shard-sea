@@ -46,3 +46,14 @@ export function loadChanges(): Changes {
 export function countFor(meta: Meta, kind: string): number {
   return meta.sections.find((s) => s.kind === kind)?.count ?? 0;
 }
+
+// The compact browse index (public/data/<kind>.index.json) — what the listing pages filter.
+export function loadIndex(kind: string): Rec[] {
+  const file = `../../public/data/${kind}.index.json`;
+  let v = cache.get(file);
+  if (v === undefined) {
+    v = JSON.parse(readFileSync(join(process.cwd(), 'public', 'data', `${kind}.index.json`), 'utf8'));
+    cache.set(file, v);
+  }
+  return v;
+}

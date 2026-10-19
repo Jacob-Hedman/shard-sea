@@ -18,7 +18,7 @@ export async function initList(mount: HTMLElement) {
   mount.innerHTML = `
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
       <div>
-        <h1 style="font-size:1.9rem;letter-spacing:-.02em">Characters</h1>
+        <h1 class="board pg-h" data-t="Characters">Characters</h1>
         <p style="color:var(--color-muted);font-size:.9rem;margin-top:.25rem">Everyone's sheets — build your own or open a friend's.</p>
       </div>
       <a class="cs-copy" style="margin-left:auto;text-decoration:none" href="/characters/build">+ New character</a>

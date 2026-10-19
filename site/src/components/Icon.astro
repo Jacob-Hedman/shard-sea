@@ -1,0 +1,13 @@
+---
+// Inline Tabler icon (see src/lib/icons.ts). Decorative by default.
+import { ICONS } from '../lib/icons';
+
+interface Props {
+  name: string;
+  class?: string;
+}
+const { name, class: cls = '' } = Astro.props;
+const paths = ICONS[name.replace(/^ti-/, '')] ?? [];
+---
+
+<svg class:list={['ti', cls]} viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{paths.map((d) => <path d={d} />)}</svg>

@@ -1,209 +1,354 @@
 ---
+import Icon from './Icon.astro';
 import { routeMap, labelMap, SECTIONS } from '../lib/sections';
 import { loadMeta, countFor } from '../lib/data';
+import { jsonForScript } from '../lib/format';
 
-// Section launcher rows (icon + label + entry count) and per-kind icons for
-// result rows — resolved at build, injected via define:vars.
+// Section launcher rows (label + entry count) for the empty palette — resolved at
+// build and handed to the script below as JSON.
 const meta = loadMeta();
-const sectionRows = SECTIONS.map((s) => ({
+const sectionRows = SECTIONS.filter((s) => !s.hidden).map((s) => ({
   label: s.label,
   route: s.route,
-  icon: s.icon,
   count: countFor(meta, s.kind),
 }));
-const iconMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.icon]));
+const pluralMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.label]));
+const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows });
 ---
 
-<div id="search-overlay" transition:persist="search-overlay" role="dialog" aria-modal="true" aria-label="Site search" class="fixed inset-0 z-50 hidden" aria-hidden="true">
-  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-search-close></div>
-  <div class="relative mx-auto mt-[8vh] w-full max-w-xl px-4">
-    <div class="card overflow-hidden shadow-2xl shadow-black/50">
-      <div class="flex items-center gap-2 border-b border-line px-4">
-        <svg class="h-5 w-5 shrink-0 text-faint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path>
-        </svg>
-        <input
-          id="search-input"
-          type="text"
-          aria-label="Search spells, feats, classes, and more"
-          placeholder="Search everything, or jump to a section…"
-          autocomplete="off"
-          autocorrect="off"
-          spellcheck="false"
-          class="w-full bg-transparent py-3.5 text-ink outline-none placeholder:text-faint"
-        />
-        <kbd class="hidden rounded border border-line bg-surface-2 px-1.5 py-0.5 text-[10px] text-faint sm:block">Esc</kbd>
-      </div>
-      <div id="search-results" class="max-h-[60vh] overflow-y-auto p-2"></div>
-      <div id="search-hint" class="border-t border-line px-4 py-2 text-xs text-faint">
-        Jump to a section below, or type to search across everything.
-      </div>
-    </div>
+<div id="search-overlay" transition:persist="search-overlay" role="dialog" aria-modal="true" aria-label="Search the Codex" class="gs hidden" aria-hidden="true">
+  <div class="gs-back" data-search-close></div>
+  <div class="gs-box">
+    <label class="gs-field">
+      <Icon name="search" />
+      <input id="search-input" type="text" aria-label="Search feats, weapons, conditions and more" placeholder="Query the Codex, or jump to a section" autocomplete="off" autocorrect="off" spellcheck="false" />
+      <kbd>Esc</kbd>
+    </label>
+    <div id="search-results" class="gs-results"></div>
+    <div id="search-hint" class="gs-hint">Jump to a section below, or type to search across everything.</div>
   </div>
 </div>
+<script type="application/json" id="gs-config" set:html={gsConfig}></script>
 
-<script is:inline define:vars={{ routeMap, labelMap, sectionRows, iconMap }}>
-  (() => {
-    // The overlay element is `transition:persist`ed, so it (and these listeners)
-    // survive client-side navigation — bind only once.
-    if (window.__searchInit) return;
-    window.__searchInit = true;
+<script>
+  // Search palette. Matching, ranking and phrase parsing live in lib/searchcore.js
+  // (shared with the browse pages and scripts/search-selftest.mjs):
+  //   - names match word by word, in any order, forgiving small typos, apostrophes,
+  //     accents and plurals, and by the other names export-data adds ("Greater
+  //     Invisibility", "DMM", "Apparatus of Kwalish")
+  //   - a spell's potion, wands and scrolls fold into its row
+  //   - a phrase like "wizard 3 fire" becomes removable filter chips over that
+  //     section's own data, with a link to its browse page with the same filters
+  import { NameIndex, parseQuery, withoutWords, makeTextFilter, hayTokens } from '../lib/searchcore.js';
+
+  type Entry = { n: string; k: string; s: string; b?: string; a?: string[]; p?: number; v?: string; c?: string };
+  type Hit = { e: Entry; i: number; tier: number; fz: number };
+  type Rec = { name: string; slug: string; sub?: string; desc?: string; content_type?: string; facets?: Record<string, string[]> };
+  type Parsed = ReturnType<typeof parseQuery>;
+
+  // The overlay element is `transition:persist`ed, so it (and these listeners)
+  // survive client-side navigation — bind only once.
+  const w = window as unknown as { __searchInit?: boolean; openSearch?: () => void };
+  if (!w.__searchInit) {
+    w.__searchInit = true;
+    init();
+  }
+
+  function init() {
+    const cfg = JSON.parse(document.getElementById('gs-config')?.textContent || '{}');
+    const routeMap: Record<string, string> = cfg.routeMap || {};
+    const labelMap: Record<string, string> = cfg.labelMap || {};
+    const pluralMap: Record<string, string> = cfg.pluralMap || {};
+    const sectionRows: { label: string; route: string; count: number }[] = cfg.sectionRows || [];
     const overlay = document.getElementById('search-overlay');
-    const input = document.getElementById('search-input');
+    const input = document.getElementById('search-input') as HTMLInputElement | null;
     const results = document.getElementById('search-results');
     const hint = document.getElementById('search-hint');
-    if (!overlay || !input || !results) return;
+    if (!overlay || !input || !results || !hint) return;
 
-    let data = null;
+    let index: NameIndex | null = null;
+    let facets: Parameters<typeof parseQuery>[1] = null;
     let loading = false;
     let sel = -1;
-    let rows = [];
+    let token = 0; // bumps on every render, so a slow section load can't paint over newer results
+    const sectionData = new Map<string, Promise<Rec[]>>();
+    const promCache = new Map<string, Map<string, number>>();
+    const tokCache = new WeakMap<Rec, string[]>();
 
     async function ensureData() {
-      if (data || loading) return;
+      if (index || loading) return;
       loading = true;
       try {
-        const res = await fetch('/data/search.json');
-        data = await res.json();
-      } catch (e) {
-        data = [];
+        const [entries, f] = await Promise.all([
+          fetch('/data/search.json').then((r) => r.json()),
+          fetch('/data/search-facets.json')
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+        index = new NameIndex(entries);
+        facets = f;
+      } catch {
+        index = new NameIndex([]);
       }
       loading = false;
-      if (input.value) render(input.value);
+      if (input!.value) render(input!.value);
     }
-
-    function score(name, q) {
-      const n = name.toLowerCase();
-      if (n === q) return 0;
-      if (n.startsWith(q)) return 1;
-      const wb = n.indexOf(' ' + q);
-      if (wb >= 0) return 2;
-      if (n.includes(q)) return 3;
-      return -1;
+    // a section's browse data (the same file its browse page filters), loaded on demand
+    function section(kind: string) {
+      if (!sectionData.has(kind))
+        sectionData.set(kind, fetch(`/data/${kind}.index.json`).then((r) => r.json()).catch(() => []));
+      return sectionData.get(kind)!;
     }
-
-    function render(query) {
-      const q = query.trim().toLowerCase();
-      if (!q) {
-        renderSections();
-        hint.textContent = 'Jump to a section below, or type to search across everything.';
-        return;
+    // prominence per slug, from the search index (core books first)
+    function prominence(kind: string) {
+      let m = promCache.get(kind);
+      if (!m) {
+        m = new Map((index?.entries ?? []).filter((e: Entry) => e.k === kind).map((e: Entry) => [e.s, e.p ?? 0]));
+        promCache.set(kind, m);
       }
-      if (!data) {
-        hint.textContent = 'Loading index…';
-        return;
-      }
-      // honor the persisted content-visibility preference (homebrew is
-      // hidden by default; the home/browse checkboxes flip it)
-      let excluded;
+      return m;
+    }
+    const recTokens = (r: Rec) => {
+      let t = tokCache.get(r);
+      if (!t) tokCache.set(r, (t = hayTokens(`${r.name} ${r.sub ?? ''} ${r.desc ?? ''}`)));
+      return t;
+    };
+    // honor the persisted content-visibility preference (homebrew is hidden by
+    // default; the home/browse checkboxes flip it)
+    function excludedTypes(): Set<string> {
       try {
         const v = localStorage.getItem('dnd-exclude-ct');
-        excluded = new Set(v == null ? ['homebrew'] : JSON.parse(v));
-      } catch (e) {
-        excluded = new Set(['homebrew']);
+        return new Set(v == null ? ['homebrew'] : JSON.parse(v));
+      } catch {
+        return new Set(['homebrew']);
       }
-      const scored = [];
-      for (const e of data) {
-        if (e.c && excluded.has(e.c)) continue;
-        const s = score(e.n, q);
-        if (s >= 0) scored.push([s, e]);
-      }
-      scored.sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length);
-      rows = scored.slice(0, 40).map((x) => x[1]);
-      sel = rows.length ? 0 : -1;
+    }
 
-      results.innerHTML = '';
-      if (!rows.length) {
-        hint.textContent = `No matches for “${query}”.`;
+    function el(tag: string, cls = '', text?: string) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    }
+    function row(e: { k: string; s: string; n: string; b?: string }, opts: { top?: boolean; also?: string | null } = {}) {
+      const a = el('a', 'gs-row' + (opts.top ? ' gs-top' : '')) as HTMLAnchorElement;
+      a.href = `/${routeMap[e.k] || e.k}/${e.s}`;
+      const main = el('div', 'gs-main');
+      main.append(el('div', 'gs-n', e.n));
+      if (e.b) main.append(el('div', 'gs-s', e.b.replace(/\s*[,;]+\s*$/, '')));
+      if (opts.also) main.append(el('div', 'gs-also', `Also as ${opts.also}`));
+      a.append(el('span', 'gs-k', labelMap[e.k] || e.k), main);
+      return a;
+    }
+
+    // a spell's potion / wands / scrolls / oil fold into its row when the spell is listed
+    function fold(hits: Hit[]) {
+      const spells = new Map(hits.filter((h) => h.e.k === 'spell').map((h) => [h.e.s, h]));
+      const kids = new Map<Hit, Entry[]>();
+      const list: Hit[] = [];
+      for (const h of hits) {
+        const parent = h.e.v ? spells.get(h.e.v) : undefined;
+        if (parent) kids.set(parent, [...(kids.get(parent) ?? []), h.e]);
+        else list.push(h);
+      }
+      return { list, kids };
+    }
+    function alsoText(items: Entry[]) {
+      const c: Record<string, number> = {};
+      for (const e of items) {
+        const word = (/^(potion|wand|scroll|oil)/i.exec(e.n)?.[1] || 'item').toLowerCase();
+        c[word] = (c[word] || 0) + 1;
+      }
+      return Object.entries(c)
+        .map(([word, n]) => (n > 1 ? `${n} ${word}s` : word))
+        .join(' · ');
+    }
+
+    // the best match as a card, then the rest grouped by section
+    function renderHits(hits: Hit[]) {
+      const { list, kids } = fold(hits);
+      if (!list.length) return 0;
+      const also = (h: Hit) => (kids.has(h) ? alsoText(kids.get(h)!) : null);
+      results!.append(row(list[0].e, { top: true, also: also(list[0]) }));
+      const groups = new Map<string, Hit[]>();
+      for (const h of list.slice(1)) groups.set(h.e.k, [...(groups.get(h.e.k) ?? []), h]);
+      const cap = groups.size > 1 ? 8 : 40;
+      let shown = 1;
+      for (const [k, g] of groups) {
+        if (shown >= 40) break;
+        results!.append(el('div', 'gs-head', `${pluralMap[k] || k} · ${g.length}`));
+        for (const h of g.slice(0, cap)) {
+          results!.append(row(h.e, { also: also(h) }));
+          shown++;
+        }
+      }
+      return list.length;
+    }
+
+    // "wizard 3 fire" -> [Spells] [Wizard ×] [Level 3 ×] [Fire ×] over the section's data
+    async function renderStructured(p: Parsed, my: number, skip: (e: Entry) => boolean) {
+      const kind = p.kind!;
+      const kindLabel = p.prestige ? 'Prestige classes' : pluralMap[kind] || kind;
+      const pageLabel = pluralMap[kind] || kind;
+      const chips = el('div', 'gs-chips');
+      chips.append(el('span', 'gs-chips-l', 'Looking for'));
+      const chip = (label: string, from: number, to: number) => {
+        const b = el('button', 'gs-chip') as HTMLButtonElement;
+        b.type = 'button';
+        b.title = `Remove “${label}”`;
+        b.append(el('span', '', label), el('b', '', '×'));
+        b.addEventListener('click', () => {
+          input!.value = withoutWords(p.words, from, to);
+          input!.focus();
+          render(input!.value);
+        });
+        chips.append(b);
+      };
+      if (p.kindAt) chip(kindLabel, p.kindAt[0], p.kindAt[1]);
+      else chips.append(el('span', 'gs-chip is-fixed', kindLabel));
+      // facets only filter spells and powers; elsewhere the words search the text
+      const faceted = (kind === 'spell' || kind === 'power') && p.cues.length > 0;
+      const text = faceted ? p.rest : [...p.cues.map((c) => c.label), p.rest].filter(Boolean).join(' ');
+      if (faceted) for (const c of p.cues) chip(c.label, c.from, c.to);
+      if (text) chips.append(el('span', 'gs-chip is-text', `“${text}”`));
+      results!.append(chips);
+
+      if (faceted || p.prestige) {
+        hint!.textContent = `Loading ${kindLabel.toLowerCase()}…`;
+        const recs = await section(kind);
+        if (my !== token) return;
+        const excluded = excludedTypes();
+        const tf = text ? makeTextFilter(text) : null;
+        const hits = recs.filter(
+          (r) =>
+            !(r.content_type && excluded.has(r.content_type)) &&
+            (!faceted || p.cues.every((c) => (r.facets?.[c.field] ?? []).includes(c.value))) &&
+            (!p.prestige || (r.facets?.class_type ?? []).includes('prestige')) &&
+            (!tf || tf(recTokens(r))),
+        );
+        const prom = prominence(kind);
+        hits.sort((a, b) => (prom.get(b.slug) ?? 0) - (prom.get(a.slug) ?? 0) || a.name.localeCompare(b.name));
+        for (const r of hits.slice(0, 8)) results!.append(row({ k: kind, s: r.slug, n: r.name, b: r.sub }));
+        const params = new URLSearchParams();
+        const by: Record<string, string[]> = {};
+        if (faceted) for (const c of p.cues) (by[c.field] ??= []).push(c.value);
+        for (const [f, v] of Object.entries(by)) params.set(f, v.join(','));
+        if (p.prestige) params.set('class_type', 'prestige');
+        if (text) params.set('q', text);
+        const all = el('a', 'gs-row gs-all') as HTMLAnchorElement;
+        all.href = `/${routeMap[kind] || kind}?${params}`;
+        all.append(el('span', 'gs-k', '→'), el('div', 'gs-main gs-n', hits.length > 8 ? `See all ${hits.length} on the ${pageLabel} page` : `Open ${pageLabel} with these filters`));
+        results!.append(all);
+        hint!.textContent = `${hits.length} ${kindLabel.toLowerCase()}`;
+      } else {
+        // a section word plus words: a name search inside that section
+        const n = text ? renderHits(index!.search(text, { kind, skip })) : 0;
+        if (!n) {
+          const all = el('a', 'gs-row gs-all') as HTMLAnchorElement;
+          all.href = `/${routeMap[kind] || kind}${text ? `?q=${encodeURIComponent(text)}` : ''}`;
+          all.append(el('span', 'gs-k', '→'), el('div', 'gs-main gs-n', `Open ${pageLabel}${text ? ` and search “${text}”` : ''}`));
+          results!.append(all);
+        }
+        hint!.textContent = n ? `${n} in ${kindLabel}` : text ? `No ${kindLabel.toLowerCase()} named like “${text}”.` : kindLabel;
+      }
+      selectFirst();
+    }
+
+    function render(query: string) {
+      const my = ++token;
+      const q = query.trim();
+      results!.innerHTML = '';
+      sel = -1;
+      if (!q) {
+        renderSections();
+        hint!.textContent = 'Jump to a section below, or type to search across everything.';
         return;
       }
-      hint.textContent = `${scored.length} match${scored.length === 1 ? '' : 'es'}`;
-      rows.forEach((e, i) => {
-        const a = document.createElement('a');
-        a.href = `/${routeMap[e.k] || e.k}/${e.s}`;
-        a.className =
-          'flex items-center gap-3 rounded-lg px-3 py-2 ' +
-          (i === sel ? 'bg-arcane/15' : 'hover:bg-surface-2');
-        a.dataset.idx = String(i);
-        const ic = document.createElement('i');
-        ic.className = 'ti ' + (iconMap[e.k] || 'ti-file') + ' shrink-0 text-[15px] text-faint';
-        ic.setAttribute('aria-hidden', 'true');
-        const left = document.createElement('div');
-        left.className = 'min-w-0 flex-1';
-        const title = document.createElement('div');
-        title.className = 'truncate text-ink';
-        title.textContent = e.n;
-        const subline = document.createElement('div');
-        subline.className = 'truncate text-xs text-faint';
-        subline.textContent = e.b ? e.b : '';
-        left.appendChild(title);
-        if (e.b) left.appendChild(subline);
-        const tag = document.createElement('span');
-        tag.className =
-          'shrink-0 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted';
-        tag.textContent = labelMap[e.k] || e.k;
-        a.appendChild(ic);
-        a.appendChild(left);
-        a.appendChild(tag);
-        results.appendChild(a);
-      });
+      if (!index) {
+        hint!.textContent = 'Loading index…';
+        return;
+      }
+      const excluded = excludedTypes();
+      const skip = (e: Entry) => !!e.c && excluded.has(e.c);
+      const p = parseQuery(q, facets);
+      if (p.structured && p.kind) {
+        void renderStructured(p, my, skip);
+        return;
+      }
+      let hits = index.search(q, { skip });
+      // "fireball wizard": the filter words match no name, so try the rest alone
+      if (!hits.length && p.cues.length && p.rest) hits = index.search(p.rest, { skip });
+      const n = renderHits(hits);
+      if (n) hint!.textContent = `${n} match${n === 1 ? '' : 'es'}`;
+      else {
+        const sug = index.suggest(q).filter((e: Entry) => !skip(e));
+        if (sug.length) {
+          results!.append(el('div', 'gs-head', 'Did you mean'));
+          for (const e of sug) results!.append(row(e));
+        }
+        hint!.textContent = `No matches for “${q}”.`;
+      }
+      selectFirst();
+    }
+    function selectFirst() {
+      const items = results!.querySelectorAll('a');
+      sel = items.length ? 0 : -1;
+      items.forEach((a, i) => a.classList.toggle('is-active', i === sel));
+    }
+
+    // Recently viewed entries (src/scripts/recent.ts writes them), above the section list.
+    function renderRecent() {
+      let list: { h?: string; n?: string; k?: string }[] = [];
+      try {
+        list = JSON.parse(localStorage.getItem('codex-recent') || '[]').slice(0, 6);
+      } catch {}
+      if (!Array.isArray(list) || !list.length) return;
+      results!.append(el('div', 'gs-head', 'Recently viewed'));
+      for (const r of list) {
+        if (!r || !r.h || !r.n || !/^\/(?![/\\])/.test(r.h)) continue; // a path on this site only
+        const a = el('a', 'gs-row') as HTMLAnchorElement;
+        a.href = r.h;
+        a.append(el('span', 'gs-k', labelMap[r.k ?? ''] || r.k || ''), el('div', 'gs-main gs-n', r.n));
+        results!.append(a);
+      }
     }
 
     function renderSections() {
-      results.innerHTML = '';
-      const head = document.createElement('div');
-      head.className = 'px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint';
-      head.textContent = 'Jump to a section';
-      results.appendChild(head);
-      rows = sectionRows.map((s) => ({ n: s.label, route: s.route }));
+      results!.innerHTML = '';
+      renderRecent();
+      results!.append(el('div', 'gs-head', 'Jump to a section'));
       sel = -1;
       sectionRows.forEach((s, i) => {
-        const a = document.createElement('a');
+        const a = el('a', 'gs-row') as HTMLAnchorElement;
         a.href = `/${s.route}`;
-        a.className = 'flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-surface-2';
-        a.dataset.idx = String(i);
-        const ic = document.createElement('i');
-        ic.className = 'ti ' + s.icon + ' shrink-0 text-[15px] text-faint';
-        ic.setAttribute('aria-hidden', 'true');
-        const left = document.createElement('div');
-        left.className = 'min-w-0 flex-1 truncate text-ink';
-        left.textContent = s.label;
-        const count = document.createElement('span');
-        count.className = 'shrink-0 font-mono text-[10px] text-faint';
-        count.textContent = s.count.toLocaleString();
-        a.appendChild(ic);
-        a.appendChild(left);
-        a.appendChild(count);
-        results.appendChild(a);
+        a.append(el('span', 'gs-k', String(i + 1).padStart(2, '0')), el('div', 'gs-main gs-n', s.label), el('span', 'gs-c', s.count.toLocaleString()));
+        results!.append(a);
       });
     }
 
-    function setSel(next) {
-      const items = results.querySelectorAll('a');
+    function setSel(next: number) {
+      const items = results!.querySelectorAll('a');
       if (!items.length) return;
       sel = (next + items.length) % items.length;
-      items.forEach((el, i) => {
-        el.classList.toggle('bg-arcane/15', i === sel);
-        el.classList.toggle('hover:bg-surface-2', i !== sel);
-      });
+      items.forEach((a, i) => a.classList.toggle('is-active', i === sel));
       items[sel].scrollIntoView({ block: 'nearest' });
     }
 
     function open() {
-      overlay.classList.remove('hidden');
-      overlay.setAttribute('aria-hidden', 'false');
+      overlay!.classList.remove('hidden');
+      overlay!.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
-      input.value = '';
+      input!.value = '';
       render('');
-      setTimeout(() => input.focus(), 0);
-      ensureData();
+      setTimeout(() => input!.focus(), 0);
+      void ensureData();
     }
     function close() {
-      overlay.classList.add('hidden');
-      overlay.setAttribute('aria-hidden', 'true');
+      overlay!.classList.add('hidden');
+      overlay!.setAttribute('aria-hidden', 'true');
       document.body.style.overflow = '';
     }
-    window.openSearch = open;
+    w.openSearch = open;
 
     // Close the palette when a result (or any link) triggers a navigation.
     document.addEventListener('astro:after-swap', () => {
@@ -211,26 +356,32 @@ const iconMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.icon]));
     });
 
     document.addEventListener('click', (e) => {
-      if (e.target.closest('[data-search-open]')) {
+      const t = e.target as Element | null;
+      if (t?.closest('[data-search-open]')) {
         e.preventDefault();
         open();
       }
-      if (e.target.closest('[data-search-close]')) close();
+      if (t?.closest('[data-search-close]')) close();
     });
 
     input.addEventListener('input', () => render(input.value));
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSel(sel + 1); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(sel - 1); }
-      else if (e.key === 'Enter') {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSel(sel + 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSel(sel - 1);
+      } else if (e.key === 'Enter') {
         const items = results.querySelectorAll('a');
         if (items[sel]) window.location.href = items[sel].href;
       }
     });
 
     document.addEventListener('keydown', (e) => {
-      const tag = (e.target.tagName || '').toLowerCase();
-      const typing = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+      const t = e.target as HTMLElement;
+      const tag = (t.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || t.isContentEditable;
       if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !typing)) {
         e.preventDefault();
         open();
@@ -238,5 +389,5 @@ const iconMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.icon]));
         close();
       }
     });
-  })();
+  }
 </script>

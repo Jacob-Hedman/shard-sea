@@ -1,0 +1,123 @@
+---
+// Compare: two to four entries from one section side by side. The page reads the picks from the
+// address (/compare?kind=spell&e=fireball,lightning-bolt, so a comparison can be linked) or from
+// the tray, then fetches each entry's own page and lifts its plate, facts, grade, class list,
+// prerequisites and opening lines, so the comparison always matches the entry pages.
+import Layout from '../components/Layout.astro';
+import { routeMap, SECTIONS } from '../lib/sections';
+import { jsonForScript } from '../lib/format';
+const pluralMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.label]));
+---
+
+<Layout title="Compare" description="Entries side by side: sigils and facts.">
+  <section class="cmp-hd">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Codex</a><span aria-hidden="true">/</span><span aria-current="page">Compare</span></nav>
+    <h1 class="board" data-t="Compare">Compare</h1>
+    <p class="cmp-lede" id="cmpLede">Pick two to four entries from one section with the ⇄ Compare button on an entry page or the ⇄ beside a row in any list.</p>
+    <label class="ctbox" id="cmpDiffWrap" hidden><input type="checkbox" id="cmpDiff" /> Only rows that differ</label>
+  </section>
+  <div class="cmp-out" id="cmpOut">
+    <div class="cmp-empty" id="cmpEmpty">
+      <p>Nothing picked yet. Try one of these:</p>
+      <div class="examples">
+        <a href="/compare?kind=weapon&e=imperial-saber,estoc,long-knife">Imperial Saber · Estoc · Long-Knife</a>
+        <a href="/compare?kind=armor&e=cloth-armor,leather-armor,chain-and-gambeson,dragon-armor">Cloth · Leather · Chain · Dragon Armor</a>
+        <a href="/compare?kind=skill&e=vitality,action,potence,resolve">The four Principal Skills</a>
+        <a href="/compare?kind=archetype&e=warrior,hero,guardian">Warrior · Hero · Guardian</a>
+      </div>
+    </div>
+  </div>
+  <script type="application/json" id="cmpMaps" set:html={jsonForScript({ routeMap, pluralMap })} />
+
+  <script>
+    import { getPicks, setPicks, compareHref, type Pick } from '../scripts/compare';
+    import { inscribe } from '../scripts/sigil';
+
+    interface Entry { pick: Pick; name: string; plate: string; rows: Map<string, string>; }
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const text = (el: Element | null | undefined) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+    // Lift what a comparison needs out of an entry's own page.
+    async function load(p: Pick): Promise<Entry | null> {
+      try {
+        const res = await fetch(p.h);
+        if (!res.ok) return null;
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        const rows = new Map<string, string>();
+        const tier = doc.querySelector('.file-hd [data-tier]');
+        // Classes carry their tier among the facts already.
+        if (tier && !/^Tier/.test(text(tier))) rows.set('Grade', text(tier).replace(/^Grade\s+/, ''));
+        doc.querySelectorAll('.file-hd .glance.facts > div').forEach((d) => rows.set(text(d.querySelector('dt')), text(d.querySelector('dd'))));
+        doc.querySelectorAll('.file-side .side-block').forEach((b) => {
+          const h = text(b.querySelector('h2')).replace(/\s*\d+$/, '');
+          if (h === 'Available to') rows.set(h, [...b.querySelectorAll('.tag')].map(text).join(', '));
+          if (h === 'Prerequisites') rows.set(h, [...b.querySelectorAll('li')].map(text).join(', '));
+          if (h === 'Ability adjustments') rows.set(h, [...b.querySelectorAll('.abil > div')].map((d) => `${text(d.querySelector('span'))} ${text(d.querySelector('b'))}`).filter((s) => !/\+0$/.test(s)).join(', ') || 'None');
+        });
+        const lede = text(doc.querySelector('.file-main .prose-dnd p, .file-main p'));
+        if (lede) rows.set('Opening', lede.length > 260 ? lede.slice(0, 259).trimEnd() + '…' : lede);
+        return { pick: p, name: text(doc.querySelector('.file-hd h1')) || p.n, plate: doc.querySelector('#plate svg')?.outerHTML ?? '', rows };
+      } catch {
+        return null;
+      }
+    }
+
+    async function init() {
+      const out = document.getElementById('cmpOut');
+      const maps = document.getElementById('cmpMaps');
+      if (!out || !maps || out.dataset.init) return;
+      out.dataset.init = '1';
+      const { routeMap, pluralMap } = JSON.parse(maps.textContent || '{}') as Record<string, Record<string, string>>;
+      // The address wins (a shared link); otherwise the tray's picks.
+      const q = new URLSearchParams(location.search);
+      const kind = q.get('kind');
+      let picks: Pick[] = kind && routeMap[kind]
+        ? (q.get('e') ?? '').split(',').filter((s) => /^[a-z0-9][a-z0-9-]*$/i.test(s)).slice(0, 4).map((s) => ({ k: kind, s, n: s, h: `/${routeMap[kind]}/${s}/` }))
+        : getPicks();
+      if (!picks.length) return;
+      out.innerHTML = `<p class="cmp-loading">Opening ${picks.length} files…</p>`;
+      const entries = (await Promise.all(picks.map(load))).filter(Boolean) as Entry[];
+      if (!entries.length) { out.innerHTML = '<p class="cmp-loading">Those entries could not be found.</p>'; return; }
+      picks = entries.map((e) => ({ ...e.pick, n: e.name }));
+      setPicks(picks); // the tray and the buttons follow the page
+      history.replaceState(null, '', compareHref(picks));
+      render(out, entries, pluralMap[picks[0].k] ?? 'entries');
+    }
+
+    function render(out: HTMLElement, entries: Entry[], plural: string) {
+      const labels: string[] = [];
+      for (const e of entries) for (const k of e.rows.keys()) if (!labels.includes(k)) labels.push(k);
+      // Grade and the facts first, the long rows last.
+      const late = ['Available to', 'Prerequisites', 'Ability adjustments', 'Opening'];
+      labels.sort((a, b) => Number(late.includes(a)) - Number(late.includes(b)) || late.indexOf(a) - late.indexOf(b));
+      const lede = document.getElementById('cmpLede');
+      if (lede) lede.textContent = `${entries.length} ${plural.toLowerCase()} side by side. Rows where they differ are marked; the ⇄ buttons add or remove entries.`;
+      const head = entries
+        .map((e) => `<th scope="col"><a class="cmp-plate" href="${esc(e.pick.h)}" data-inscribe>${e.plate}</a><a class="cmp-name" href="${esc(e.pick.h)}">${esc(e.name)}</a><button type="button" class="cmp-x" data-cmp-rm="${esc(e.pick.h)}" aria-label="Remove ${esc(e.name)}">Remove</button></th>`)
+        .join('');
+      const body = labels
+        .map((l) => {
+          const vals = entries.map((e) => e.rows.get(l) ?? '');
+          const differ = new Set(vals.map((v) => v.toLowerCase())).size > 1;
+          return `<tr class="${differ ? 'diff' : 'same'}${l === 'Opening' ? ' long' : ''}"><th scope="row">${esc(l)}${differ ? '<i aria-label="differs"></i>' : ''}</th>${vals.map((v) => `<td>${v ? esc(v) : '<span class="none">—</span>'}</td>`).join('')}</tr>`;
+        })
+        .join('');
+      out.innerHTML = `<div class="cmp-scroll"><table class="cmp-table" style="--n:${entries.length}"><thead><tr><td></td>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+      out.querySelectorAll('[data-inscribe] svg').forEach((svg) => inscribe(svg));
+      const wrap = document.getElementById('cmpDiffWrap');
+      const cb = document.getElementById('cmpDiff') as HTMLInputElement | null;
+      if (wrap && cb) {
+        wrap.hidden = entries.length < 2;
+        cb.onchange = () => out.classList.toggle('only-diff', cb.checked);
+      }
+      // Removing an entry here re-renders from the new picks.
+      out.onclick = (ev) => {
+        const rm = (ev.target as Element).closest<HTMLElement>('[data-cmp-rm]');
+        if (!rm) return;
+        const left = getPicks().filter((p) => p.h !== rm.dataset.cmpRm);
+        location.replace(left.length ? compareHref(left) : '/compare');
+      };
+    }
+    document.addEventListener('astro:page-load', init);
+  </script>
+</Layout>

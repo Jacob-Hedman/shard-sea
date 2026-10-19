@@ -1,0 +1,45 @@
+---
+// The side column's shared tail on every entry file: where the entry sits in the book,
+// then Kin (entries whose sigils share its marks). Detail components put their own side
+// content first and this in their `side` slot.
+import { hrefFor, sectionByKind } from '../lib/sections';
+import { kinOf, mark } from '../lib/sigil';
+
+interface Props {
+  rec: any;
+}
+const { rec } = Astro.props;
+const kin = kinOf(rec, 6);
+const sec = sectionByKind(rec.kind);
+// "In: <chapter page>" context link, but not on the page itself.
+const inPage = rec.page_slug && rec.page_slug !== rec.slug ? { slug: rec.page_slug, title: rec.page_title } : null;
+---
+
+{
+  inPage && (
+    <section class="side-block">
+      <h2 class="subh">In the book</h2>
+      <a class="lnk" href={`/pages/${inPage.slug}`}>{inPage.title}</a>
+    </section>
+  )
+}
+{
+  kin.length > 0 && (
+    <section class="side-block kin">
+      <h2 class="sect-h">Kin<small>{sec?.label.toLowerCase()} whose sigils share its marks</small></h2>
+      <ul>
+        {kin.map((x) => (
+          <li>
+            <a href={hrefFor(x.rec.kind, x.rec.slug)}>
+              <Fragment set:html={mark(x.row, 44)} />
+              <span>
+                <b>{x.rec.name}</b>
+                <small>{x.why}</small>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
