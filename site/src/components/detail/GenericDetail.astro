@@ -1,39 +1,17 @@
 ---
-import StatBlock from '../StatBlock.astro';
+import Icon from '../Icon.astro';
 import Prose from '../Prose.astro';
+import { GENERIC_SKIP as SKIP, SHORT } from '../../lib/facts';
 import { hrefFor } from '../../lib/sections';
 
 // Fallback renderer — used for runes and materials (and any future kind without
-// a bespoke component). Key attributes become a stat block; flavor + effects
-// render as prose.
+// a bespoke component). Short attributes are the header's facts (lib/facts.ts);
+// flavor, effects and long attributes render here as prose.
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const LABEL = 'subh';
 
 const attrs = rec.attrs ?? {};
-const SKIP = new Set([
-  'description', 'panic_flavor', 'Record', 'record_type', 'injuries',
-  'spoke', 'unlocks_at', 'notes', 'examples',
-  // provenance stamped on custom items by the importer — shown as the Custom badge /
-  // callout instead; 'Made On' (the author's own field) stays as one stat row
-  'custom', 'made_on', 'status', 'origin', 'outdated',
-]);
-// The stat rail is narrow and monospaced: only short, scalar-ish values belong
-// there. Anything sentence-like renders as its own section instead.
-const SHORT = 30;
-const rows = [
-  rec.rune_class && { label: 'Class', value: rec.rune_class },
-  rec.multiplier && { label: 'Multiplier', value: rec.multiplier },
-  rec.applies_to && { label: 'Applies to', value: rec.applies_to },
-  // the governing Skill / access for Activities and similar grouped kinds
-  rec.kind === 'activity' && rec.group && { label: 'Skill', value: rec.group },
-  ...Object.entries(attrs)
-    .filter(([k, v]) =>
-      !SKIP.has(k) &&
-      !['Class', 'Multipier', 'Multiplier', 'applies_to'].includes(k) &&
-      v && typeof v !== 'object' && String(v).length <= SHORT)
-    .map(([k, v]) => ({ label: k.replace(/_/g, ' '), value: v as any })),
-].filter(Boolean) as { label: string; value: any }[];
 
 // Long sub-label blocks (Time, Procedure, Limits, Collaboration…) read as
 // sections, not as cramped stat rows — this is what Activities are made of.
@@ -51,18 +29,8 @@ const effectText = rec.effects && String(rec.effects).trim() && rec.effects !== 
   ? rec.effects : '';
 ---
 
-<div class:list={[rows.length > 0 && 'lg:grid lg:grid-cols-[1fr_16rem] lg:gap-8']}>
-  {rows.length > 0 && (
-    <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
-      <StatBlock rows={rows} />
-      {rec.discipline_slug && (
-        <a href={hrefFor('discipline', rec.discipline_slug)} class="inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
-          <i class="ti ti-arrow-left text-sm" aria-hidden="true"></i>{rec.discipline_name}
-        </a>
-      )}
-    </aside>
-  )}
-  <div class="min-w-0 space-y-5 lg:order-1">
+<div class="file-main">
+  <div class="min-w-0 space-y-5">
     {lead && <p class="text-[15px] leading-relaxed text-muted">{lead}</p>}
     {effectText && (
       <section>
@@ -78,3 +46,9 @@ const effectText = rec.effects && String(rec.effects).trim() && rec.effects !== 
     ))}
   </div>
 </div>
+<aside class="file-side">
+  {rec.discipline_slug && (
+    <a href={hrefFor('discipline', rec.discipline_slug)} class="side-link"><Icon name="arrow-left" /> {rec.discipline_name}</a>
+  )}
+  <slot name="side" />
+</aside>

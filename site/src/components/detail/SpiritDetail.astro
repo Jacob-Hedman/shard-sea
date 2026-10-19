@@ -1,11 +1,11 @@
 ---
-import StatBlock from '../StatBlock.astro';
+import Icon from '../Icon.astro';
 import Prose from '../Prose.astro';
 import { hrefFor } from '../../lib/sections';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const LABEL = 'subh';
 
 const powers: { type: string; name: string; effect: string }[] = Array.isArray(rec.powers) ? rec.powers : [];
 const TYPE_ORDER = ['Innate', 'Active', 'Passive'];
@@ -19,21 +19,10 @@ const TYPE_CLASS: Record<string, string> = {
   Passive: 'border-line bg-surface text-muted',
 };
 
-const rows = [
-  { label: 'Court', value: rec.court },
-  { label: 'Rank', value: rec.rank },
-  rec.spirit_name && { label: 'Name', value: rec.spirit_name },
-].filter(Boolean) as { label: string; value: any }[];
 ---
 
-<div class="lg:grid lg:grid-cols-[1fr_16rem] lg:gap-8">
-  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
-    <StatBlock rows={rows} />
-    <a href={hrefFor('discipline', 'spirit-binding')} class="inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
-      <i class="ti ti-arrow-left text-sm" aria-hidden="true"></i>Spirit Binding
-    </a>
-  </aside>
-  <div class="min-w-0 space-y-5 lg:order-1">
+<div class="file-main">
+  <div class="min-w-0 space-y-5">
     {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
     {rec.bond && (
       <section>
@@ -61,3 +50,10 @@ const rows = [
     )}
   </div>
 </div>
+<aside class="file-side">
+      <a href={hrefFor('discipline', 'spirit-binding')} class="inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
+        <Icon name="arrow-left" class="text-sm" />Spirit Binding
+      </a>
+  
+  <slot name="side" />
+</aside>

@@ -3,7 +3,7 @@ import Prose from '../Prose.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const LABEL = 'subh';
 const injuries: any[] = rec.injuries ?? [];
 const sevTone: Record<string, string> = {
   '-': 'text-faint',
@@ -14,6 +14,7 @@ const sevTone: Record<string, string> = {
 };
 ---
 
+<div class="file-main">
 <div class="max-w-4xl space-y-6">
   <div class="flex flex-wrap items-center gap-2 text-xs">
     {rec.group && (
@@ -67,3 +68,7 @@ const sevTone: Record<string, string> = {
     </section>
   )}
 </div>
+</div>
+<aside class="file-side">
+  <slot name="side" />
+</aside>

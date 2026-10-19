@@ -1,5 +1,11 @@
 ---
-import { sectionByKind } from '../lib/sections';
+// An entry file (the D&D 3.5 Codex 1.0 layout): crumbs, file line, title and badges, the facts
+// that matter most as a glance grid, and the entry's sigil on the right; below, the body text
+// with the side column (the detail component's own side content, then EntrySide).
+import { sectionByKind, sectionCode, GROUP_COLOR, hrefFor } from '../lib/sections';
+import { factsFor } from '../lib/facts';
+import Sigil from './Sigil.astro';
+import EntrySide from './EntrySide.astro';
 import FeatDetail from './detail/FeatDetail.astro';
 import DisciplineDetail from './detail/DisciplineDetail.astro';
 import ArchetypeDetail from './detail/ArchetypeDetail.astro';
@@ -42,55 +48,72 @@ const map: Record<string, any> = {
   spirit: SpiritDetail,
 };
 const Body = map[rec.kind] ?? GenericDetail;
-// "In: <chapter page>" context link — but not on the page itself.
-const inPage = rec.page_slug && rec.page_slug !== rec.slug ? { slug: rec.page_slug, title: rec.page_title } : null;
+const isPage = rec.kind === 'page';
+const code = `${sectionCode(rec.kind)}-${String(rec.id ?? 0).padStart(4, '0')}`;
+const typeLabel = section?.singular ?? rec.kind;
+// The head line under the title: what kind of thing it is, in the book's own words.
+const head = isPage ? rec.chapter : [rec.group && rec.group !== section?.label ? rec.group : '', rec.record_type && rec.record_type !== rec.group ? rec.record_type : ''].filter(Boolean).join(' · ');
+const facts = factsFor(rec);
+// Long titles step down a size so a word never breaks at the giant size.
+const longestWord = Math.max(...String(rec.name).split(/\s+/).map((w) => w.length));
+const crumbSection = section && !section.hidden ? section : null;
 ---
 
-<article class="mx-auto max-w-6xl">
-  <nav class="mb-2 flex flex-wrap items-center gap-1.5 text-sm text-faint">
-    <a href="/" class="transition hover:text-gold">Home</a>
-    <i class="ti ti-chevron-right text-[11px]" aria-hidden="true"></i>
-    {section && !section.hidden && <a href={`/${section.route}`} class="transition hover:text-gold">{section.label}</a>}
-    {section && !section.hidden && <i class="ti ti-chevron-right text-[11px]" aria-hidden="true"></i>}
-    <span class="truncate text-muted">{rec.name}</span>
-  </nav>
-  <header class="mb-6 border-b border-line pb-5">
-    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <h1 class="text-3xl font-bold tracking-tight text-ink sm:text-4xl">{rec.name}</h1>
-      {rec.origin && (
-        <span class="inline-flex items-center gap-1 rounded-md border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gold">
-          <i class="ti ti-flag text-[13px]" aria-hidden="true"></i>{rec.origin}
-        </span>
-      )}
-      {rec.custom && (
-        <span class="inline-flex items-center gap-1 rounded-md border border-arcane/50 bg-arcane/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-arcane">
-          <i class="ti ti-user-star text-[13px]" aria-hidden="true"></i>Custom
-        </span>
-      )}
-      {rec.outdated && (
-        <span class="inline-flex items-center gap-1 rounded-md border border-nonogl/50 bg-nonogl/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nonogl">
-          <i class="ti ti-alert-triangle text-[13px]" aria-hidden="true"></i>Outdated
-        </span>
-      )}
+<article class:list={['file', `kind-${rec.kind}`]} data-rk={rec.kind} data-rn={rec.name}>
+  <section class="file-hd">
+    <div class="file-l">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/">Codex</a><span aria-hidden="true">/</span>
+        {crumbSection && <a href={`/${crumbSection.route}`}>{crumbSection.label}</a>}
+        {crumbSection && <span aria-hidden="true">/</span>}
+        <span aria-current="page">{rec.name}</span>
+      </nav>
+      <div class="fileline" style={`--c:${GROUP_COLOR[section?.group ?? 'World']}`}>
+        <span>File {code}</span>
+        <span class="hot">{typeLabel}</span>
+        <span class="dim">{rec.custom && rec.made_on ? `Custom · made on ${rec.made_on}` : rec.source}</span>
+        {rec.outdated && <span class="warn" title="Made for an older PHB: check it still fits.">Outdated</span>}
+      </div>
+      <h1 class:list={['board', { long: longestWord > 11 || rec.name.length > 26 }]} data-t={rec.name}>{rec.name}</h1>
+      {head && <p class="head">{head}</p>}
+      <div class="badges">
+        {rec.origin && <span class="tag yel" title="Faction / origin">{rec.origin}</span>}
+        {rec.custom && <span class="tag red">Custom</span>}
+        {rec.outdated && <span class="tag yel">Outdated</span>}
+        {!rec.custom && <span class="tag">{rec.source}</span>}
+        {!isPage && (
+          <button type="button" class="cmp-btn" data-cmp data-cmp-k={rec.kind} data-cmp-s={rec.slug} data-cmp-n={rec.name} data-cmp-h={`${hrefFor(rec.kind, rec.slug)}/`} aria-pressed="false">
+            <span aria-hidden="true">⇄</span> <span data-cmp-t>Compare</span>
+          </button>
+        )}
+      </div>
+      {
+        rec.custom && (
+          <p class="custom-note">
+            <b>{rec.origin ? `${rec.origin} · Custom.` : 'Custom.'}</b> {rec.origin ? `${rec.origin} content, added by the group's GM` : 'Added by the group’s GM'} against PHB {rec.made_on || '—'}{rec.outdated ? ', flagged outdated (the current PHB has moved on; check it still fits).' : '.'} It lives outside the book, so it stays in the codex across PHB versions.
+          </p>
+        )
+      }
+      {
+        facts.length > 0 && (
+          <dl class="glance facts" style="margin-top:16px">
+            {facts.map((f) => (
+              <div class:list={{ wide: f.wide }}>
+                <dt>{f.label}</dt>
+                <dd>{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )
+      }
     </div>
-    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-      {rec.source && (
-        <span class="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-0.5 font-medium text-faint">
-          <i class="ti ti-book text-[13px]" aria-hidden="true"></i>{rec.custom && rec.made_on ? `Custom · made on ${rec.made_on}` : rec.source}
-        </span>
-      )}
-      {inPage && (
-        <a href={`/pages/${inPage.slug}`} class="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-0.5 font-medium text-muted transition hover:border-gold/40 hover:text-gold">
-          <i class="ti ti-file-text text-[13px]" aria-hidden="true"></i>In: {inPage.title}
-        </a>
-      )}
+    <div class="file-r">
+      <Sigil rec={rec} id="plate" />
     </div>
-  </header>
-  {rec.custom && (
-    <div class="mb-6 rounded-lg border border-arcane/40 bg-arcane/5 px-3.5 py-2.5 text-sm">
-      <span class="font-semibold text-arcane">{rec.origin ? `${rec.origin} · Custom.` : 'Custom.'}</span>
-      <span class="text-muted"> {rec.origin ? `${rec.origin} content, added by the group's GM` : 'Added by the group’s GM'} against PHB {rec.made_on || '—'}{rec.outdated ? ' — flagged outdated (the current PHB has moved on; check it still fits).' : '.'} It lives outside the book, so it stays in the codex across PHB versions.</span>
-    </div>
-  )}
-  <Body rec={rec} />
+  </section>
+  <div class="file-body cols">
+    <Body rec={rec}>
+      <EntrySide slot="side" rec={rec} />
+    </Body>
+  </div>
 </article>

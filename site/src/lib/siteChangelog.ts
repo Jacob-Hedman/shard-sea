@@ -10,6 +10,18 @@ export interface SiteChange {
 export const siteChangelog: SiteChange[] = [
   {
     date: '2026-10-19',
+    title: 'Codex 1.0: the D&D 3.5 Codex design, inverted',
+    items: [
+      { tag: 'feature', text: 'The whole site now uses the D&D 3.5 Codex 1.0 design, colour-inverted: black paper, hard white rules, signal red as the one accent. A black-and-white header with section drawers replaces the sidebar, every page uses the codex type (Schibsted Grotesk and IBM Plex Mono), and fonts and icons are served from the site itself.' },
+      { tag: 'feature', text: 'Every entry is a file: a file number, a giant title, its key facts as a glance grid, and a sigil drawn from its own data (what it is, its Tier, the Ability that governs it, its themes), with a key that reads each mark. The side column lists Kin, the entries whose sigils share its marks.' },
+      { tag: 'feature', text: 'Listings are numbered ledgers with a filter form, removable chips, a rolling count and the Tier / A-Z sort. Filters can be linked (e.g. /feats?skill=Vitality&tier=Tier 1).' },
+      { tag: 'feature', text: 'New home page: the Orrery of cycling sigils, a Feats-by-Skill × Tier matrix (switchable to equipment), Start-here plates and an index of every section with shortcuts into its filters. Search remembers recently viewed entries.' },
+      { tag: 'feature', text: 'Compare: pick two to four entries of one section with ⇄ and see them side by side.' },
+      { tag: 'fix', text: 'No data changed: every page, link and character sheet works as before; the sheet and builder only took on the new look.' },
+    ],
+  },
+  {
+    date: '2026-10-19',
     title: 'Stowed items',
     items: [
       { tag: 'feature', text: 'Each item on the character sheet and in the builder has a “stowed” checkbox. Tick it for anything kept in an Imaginary Pocket or similar: its Bulk no longer counts toward Encumbrance, and the Encumbrance card shows the stowed total separately.' },

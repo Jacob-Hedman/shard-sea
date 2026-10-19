@@ -147,3 +147,19 @@ export function stripLeadingLabel(t: string, label?: string): string {
   const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return t.replace(new RegExp('^\\s*' + esc + '\\s*[.:]?\\s*', 'i'), '');
 }
+
+// JSON for a <script type="application/json"> block: escaped so text can never close the tag.
+export function jsonForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+// A short value for a fact cell: no trailing separators, single spaces.
+export function tidyValue(v: unknown): string {
+  return String(v ?? '')
+    .replace(/\s*[,;|]+\s*$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}

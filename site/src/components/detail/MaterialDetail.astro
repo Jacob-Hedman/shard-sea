@@ -1,21 +1,13 @@
 ---
 import Prose from '../Prose.astro';
-import StatBlock from '../StatBlock.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
-const rows = [
-  { label: 'Applies to', value: rec.applies_to },
-  { label: 'Value ×', value: rec.multiplier },
-];
+const LABEL = 'subh';
 ---
 
-<div class="lg:grid lg:grid-cols-[1fr_18rem] lg:gap-8">
-  <aside class="mb-6 space-y-4 lg:order-2 lg:mb-0 lg:sticky lg:top-20 lg:self-start">
-    <StatBlock rows={rows} />
-  </aside>
-  <div class="min-w-0 space-y-6 lg:order-1">
+<div class="file-main">
+  <div class="min-w-0 space-y-6">
     {rec.effects && (
       <section>
         <h2 class={LABEL}>Effect</h2>
@@ -39,3 +31,6 @@ const rows = [
     </section>
   </div>
 </div>
+<aside class="file-side">
+  <slot name="side" />
+</aside>

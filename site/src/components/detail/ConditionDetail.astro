@@ -3,7 +3,7 @@ import Prose from '../Prose.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
-const LABEL = 'mb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint';
+const LABEL = 'subh';
 const extra: Record<string, string> = rec.extra ?? {};
 const sevTone: Record<string, string> = {
   Minor: 'border-line text-muted',
@@ -13,6 +13,7 @@ const sevTone: Record<string, string> = {
 };
 ---
 
+<div class="file-main">
 <div class="max-w-3xl space-y-5">
   {rec.severity && (
     <span class={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${sevTone[rec.severity] ?? 'border-line text-muted'}`}>
@@ -32,3 +33,7 @@ const sevTone: Record<string, string> = {
     </section>
   ))}
 </div>
+</div>
+<aside class="file-side">
+  <slot name="side" />
+</aside>
