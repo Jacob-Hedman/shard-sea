@@ -122,8 +122,11 @@ export function derive(raw) {
   const maxEncVal = Math.max(0, 3 * bodyPreStrain - strainPenalty);
   const maxEnc = ex(maxEncVal, strainPenalty ? '3 × Body − strain' : '3 × Body',
     [{ label: '3 × Body', value: 3 * bodyPreStrain }, ...(strainPenalty ? [{ label: 'strain', value: -strainPenalty }] : [])]);
-  const carried = c.items.reduce((s, i) => s + numFrom(i.bulk) * Math.max(0, num(i.qty) || 1), 0);
+  // Items stowed in an Imaginary Pocket (or similar) weigh nothing against Encumbrance.
+  const itemBulk = (i) => numFrom(i.bulk) * Math.max(0, num(i.qty) || 1);
+  const carried = c.items.filter((i) => !i.stowed).reduce((s, i) => s + itemBulk(i), 0);
   const carriedRounded = Math.round(carried * 100) / 100;
+  const stowed = Math.round(c.items.filter((i) => i.stowed).reduce((s, i) => s + itemBulk(i), 0) * 100) / 100;
   const penalty = Math.max(0, Math.ceil(carriedRounded - maxEncVal));
 
   // --- derived vitals ---
@@ -278,7 +281,7 @@ export function derive(raw) {
     ability, movement, speeds, initiative, ap, reserve,
     strain, strainTracks, strainPenalty, injuryStrain, injuries, incapacitated, overload,
     conditions: c.conditions,
-    maxEnc, carried: carriedRounded, penalty, push, lift, panic,
+    maxEnc, carried: carriedRounded, stowed, penalty, push, lift, panic,
     houseDt, houseSt, houseShakes,
     corruption,
     skills, defenses, disciplines, byKind, exp, warnings,

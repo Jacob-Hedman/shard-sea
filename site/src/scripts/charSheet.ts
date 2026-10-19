@@ -468,7 +468,7 @@ function vitalsHtml(d: any) {
       <div class="v cs-num">${d.ap.value}</div>${fLine(d.ap)}
       <div class="cs-f">Spare AP carries for Reactions; excess is lost</div></div>
     <div class="cs-vital card"><div class="cs-lbl">Encumbrance</div>
-      <div class="v cs-num">${d.maxEnc.value} <small class="cs-num">· ${d.carried} carried</small></div>${fLine(d.maxEnc)}
+      <div class="v cs-num">${d.maxEnc.value} <small class="cs-num">· ${d.carried} carried${d.stowed ? ` · ${d.stowed} stowed` : ''}</small></div>${fLine(d.maxEnc)}
       <div class="cs-bar ${d.penalty ? 'over' : ''}"><span style="width:${encPct}%"></span></div>
       <div class="cs-f">push ${d.push.value} · lift ${d.lift.value}${d.penalty ? ` · <b class="bad">over by ${d.penalty}</b>` : ''}</div></div>
     <div class="cs-vital card"><div class="cs-lbl">Weight</div>
@@ -618,6 +618,7 @@ function equipHtml(d: any) {
         <div class="et">
           <b>${it.refSlug ? link(kind, it.refSlug, it.name) : esc(it.name)}</b>
           ${it.equipped ? '<span class="cs-pill cs-pill-gold">equipped</span>' : ''}
+          <label class="cs-pill" style="cursor:pointer" title="In an Imaginary Pocket or similar: its Bulk doesn't count toward Encumbrance"><input type="checkbox" data-stow="${esc(it.id)}" ${it.stowed ? 'checked' : ''}> stowed</label>
           ${it.weapon_group ? `<span class="cs-pill cs-pill-mute">${esc(it.weapon_group)}</span>` : ''}
           ${rollBtn}</div>
         <div class="stats">${stats.filter(Boolean).join('')}</div>
@@ -782,6 +783,10 @@ function bindPlay() {
   });
   on('[data-atemp]', 'click', (el) => { const k = el.dataset.atemp!; char.abilities[k].temp = (Number(char.abilities[k].temp) || 0) + Number(el.dataset.d); markDirty(); reRender(); });
   on('[data-atax]', 'click', (el) => { const k = el.dataset.atax!; char.abilities[k].tax = Math.max(0, (Number(char.abilities[k].tax) || 0) + Number(el.dataset.d)); markDirty(); reRender(); });
+  on('[data-stow]', 'change', (el) => {
+    const it = char.items.find((i: any) => i.id === el.dataset.stow);
+    if (it) { it.stowed = (el as HTMLInputElement).checked; markDirty(); reRender(); }
+  });
   on('[data-notch]', 'click', (el) => {
     const it = char.items.find((i: any) => i.id === el.dataset.notch);
     if (it) { it.notches = Math.max(0, (Number(it.notches) || 0) + Number(el.dataset.d)); markDirty(); reRender(); }

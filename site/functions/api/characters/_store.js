@@ -77,6 +77,7 @@ export function sanitize(input) {
       bulkFormula: str(i.bulkFormula, 60),
       qty: Math.max(0, numOr(i.qty, 1)),
       equipped: !!i.equipped,
+      stowed: !!i.stowed,          // in an Imaginary Pocket or similar: Bulk not carried
       notches: Math.max(0, numOr(i.notches)),
       accuracy: numOr(i.accuracy),
       tier: i.tier == null ? null : numOr(i.tier),

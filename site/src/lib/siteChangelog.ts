@@ -10,6 +10,13 @@ export interface SiteChange {
 export const siteChangelog: SiteChange[] = [
   {
     date: '2026-10-19',
+    title: 'Stowed items',
+    items: [
+      { tag: 'feature', text: 'Each item on the character sheet and in the builder has a “stowed” checkbox. Tick it for anything kept in an Imaginary Pocket or similar: its Bulk no longer counts toward Encumbrance, and the Encumbrance card shows the stowed total separately.' },
+    ],
+  },
+  {
+    date: '2026-10-19',
     title: 'Custom Magic Items, Antimony & Firearms Group Effects',
     items: [
       { tag: 'content', text: 'Antimony, a new Unique Material (Value 3,000, Multiplier 12,000T): Antimonic Weapons ignore Magical defenses of 2T or less, and Antimonic Armor shrugs off Spells and Magical Effects of 2T or less; either destroys Effects of T or less on contact. It can be added to a character from the builder.' },
