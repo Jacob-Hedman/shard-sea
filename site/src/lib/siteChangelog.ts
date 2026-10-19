@@ -9,6 +9,13 @@ export interface SiteChange {
 
 export const siteChangelog: SiteChange[] = [
   {
+    date: '2026-10-19',
+    title: 'Three custom Magic Items',
+    items: [
+      { tag: 'content', text: 'New homebrew Magic Items: the Lambent Clutch (Tier 3 gauntlets that store Charges to throw Unarmed Attacks up to 10 Meters), the Aegis Band (a Tier 3 ring that turns nearby Damage into its own Notches) and the Band of Comradery (a linked set that shares condition and lets wearers Aid at 10 Meters). They carry the Custom badge and can be added to a character from the builder.' },
+    ],
+  },
+  {
     date: '2026-08-31',
     title: 'Updated to PHB v1.8',
     items: [
