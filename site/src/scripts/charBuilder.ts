@@ -187,6 +187,7 @@ function itemsBlock() {
       <span class="ek">${kindLabel[it.kind] || it.kind}</span>
       ${it.refSlug ? `<b>${esc(it.name)}</b>` : `<input class="cs-input" data-iname="${i}" value="${esc(it.name)}" style="width:11rem;padding:.15rem .4rem;font-weight:600">`}
       ${it.kind === 'armor' || it.kind === 'artifice' ? `<label class="cs-pill" style="cursor:pointer"><input type="checkbox" data-equip="${i}" ${it.equipped ? 'checked' : ''}> equipped</label>` : ''}
+      <label class="cs-pill" style="cursor:pointer" title="In an Imaginary Pocket or similar: its Bulk doesn't count toward Encumbrance"><input type="checkbox" data-stow="${i}" ${it.stowed ? 'checked' : ''}> stowed</label>
       <span class="cs-pill">Bulk <input class="cs-input num" style="width:4rem;display:inline-block;padding:.1rem .3rem" type="number" step="0.01" data-bulk="${i}" value="${it.bulk || 0}"></span>
       <span class="cs-pill">Qty <input class="cs-input num" style="width:3rem;display:inline-block;padding:.1rem .3rem" type="number" data-qty="${i}" value="${it.qty || 1}"></span>
       ${it.mode ? `<span class="cs-pill">${esc(it.mode)}</span>` : ''}
@@ -351,6 +352,8 @@ function bindItems() {
     el.addEventListener('click', () => { char.items.splice(Number((el as HTMLElement).dataset.delitem), 1); markDirty(); reRenderItems(); }));
   document.querySelectorAll('[data-equip]').forEach((el) =>
     el.addEventListener('change', () => { char.items[Number((el as HTMLElement).dataset.equip)].equipped = (el as HTMLInputElement).checked; markDirty(); }));
+  document.querySelectorAll('[data-stow]').forEach((el) =>
+    el.addEventListener('change', () => { char.items[Number((el as HTMLElement).dataset.stow)].stowed = (el as HTMLInputElement).checked; markDirty(); }));
   document.querySelectorAll('[data-inote]').forEach((el) =>
     el.addEventListener('input', () => { char.items[Number((el as HTMLElement).dataset.inote)].note = (el as HTMLInputElement).value; markDirty(); }));
   document.querySelectorAll('[data-bulk]').forEach((el) =>
@@ -362,7 +365,7 @@ function bindItems() {
   document.getElementById('cs-additem')?.addEventListener('click', () => {
     char.items.push({
       id: crypto.randomUUID(), kind: 'generic', refSlug: null, name: 'New item', bulk: 0, bulkFormula: '',
-      tier: null, qty: 1, equipped: false, accuracy: 0, mode: '', weapon_group: '',
+      tier: null, qty: 1, equipped: false, stowed: false, accuracy: 0, mode: '', weapon_group: '',
       traits: '', damage: '', durability: '', notches: 0,
       movement_penalty: '', rating: '', activation: '', pattern: '', effects: '', note: '',
     });
@@ -376,7 +379,7 @@ function bindItems() {
     char.items.push({
       id: crypto.randomUUID(), kind: rec.kind, refSlug: rec.slug, name: rec.name,
       bulk: b.value, bulkFormula: b.formula, tier: rec.tier ?? null, qty: 1,
-      equipped: rec.kind === 'armor',
+      equipped: rec.kind === 'armor', stowed: false,
       accuracy: Number(String(st.accuracy).replace(/[^\d.-]/g, '')) || 0,
       mode: st.mode || '', weapon_group: st.weapon_group || '',
       traits: st.traits || '', damage: '',
