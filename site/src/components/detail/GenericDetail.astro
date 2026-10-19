@@ -14,6 +14,9 @@ const attrs = rec.attrs ?? {};
 const SKIP = new Set([
   'description', 'panic_flavor', 'Record', 'record_type', 'injuries',
   'spoke', 'unlocks_at', 'notes', 'examples',
+  // provenance stamped on custom items by the importer — shown as the Custom badge /
+  // callout instead; 'Made On' (the author's own field) stays as one stat row
+  'custom', 'made_on', 'status', 'origin', 'outdated',
 ]);
 // The stat rail is narrow and monospaced: only short, scalar-ish values belong
 // there. Anything sentence-like renders as its own section instead.
@@ -41,7 +44,9 @@ const longBlocks = Object.entries(attrs).filter(
 // A lead paragraph (the descriptive text), then an "Effect" section only when
 // the mechanics text actually differs from it — so descriptive-only kinds
 // (resources, weapon traits) aren't mislabelled "Effect" or shown twice.
-const lead = rec.summary || attrs.description || rec.text || '';
+// rec.text is only a lead when it isn't just the effects again (a record with no
+// descriptive text, e.g. a custom Weapon Group, should still get its Effect section).
+const lead = rec.summary || attrs.description || (rec.text !== rec.effects ? rec.text : '') || '';
 const effectText = rec.effects && String(rec.effects).trim() && rec.effects !== lead
   ? rec.effects : '';
 ---

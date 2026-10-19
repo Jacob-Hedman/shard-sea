@@ -1014,7 +1014,15 @@ def parse_custom(rel_path: str, raw: str, version: str) -> dict:
     if stem.startswith("consumable"):
         recs = handle_consumables(rel_path, raw, "consumables", page)
     elif stem.startswith("weapon"):
-        recs = [r for r in handle_items(rel_path, raw, "weapons", page) if r["kind"] == "weapon"]
+        # weapons + any '**Group Effects**' of a custom Weapon Group (e.g. Firearms)
+        recs = [r for r in handle_items(rel_path, raw, "weapons", page)
+                if r["kind"] in ("weapon", "weapon_group")]
+    elif stem.startswith("material"):
+        # Unique Materials: '- *Name*| *Multipier*:' bullets under '## Weapon' / '## Armor'
+        # (applies_to comes from that section), plus the matching '**Unique Resources**'
+        # entry with its Value — the same split the PHB uses across its chapters.
+        recs = [r for r in handle_items(rel_path, raw, "armor", page) if r["kind"] == "material"]
+        recs += handle_resources(rel_path, raw, "resources", page)
     elif stem.startswith("martech"):
         recs = make_catalog_handler("martech")(rel_path, raw, "martech", page)
     elif stem.startswith("magic"):

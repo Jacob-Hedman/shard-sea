@@ -10,9 +10,12 @@ export interface SiteChange {
 export const siteChangelog: SiteChange[] = [
   {
     date: '2026-10-19',
-    title: 'Three custom Magic Items',
+    title: 'Custom Magic Items, Antimony & Firearms Group Effects',
     items: [
+      { tag: 'content', text: 'Antimony, a new Unique Material (Value 3,000, Multiplier 12,000T): Antimonic Weapons ignore Magical defenses of 2T or less, and Antimonic Armor shrugs off Spells and Magical Effects of 2T or less; either destroys Effects of T or less on contact. It can be added to a character from the builder.' },
+      { tag: 'content', text: 'Firearms are now a proper Weapon Group with their own Group Effects page (Cartridges, Overpenetration, Notching on a Critical Failure), instead of repeating the rules on every Utari firearm.' },
       { tag: 'content', text: 'New homebrew Magic Items: the Lambent Clutch (Tier 3 gauntlets that store Charges to throw Unarmed Attacks up to 10 Meters), the Aegis Band (a Tier 3 ring that turns nearby Damage into its own Notches) and the Band of Comradery (a linked set that shares condition and lets wearers Aid at 10 Meters). They carry the Custom badge and can be added to a character from the builder.' },
+      { tag: 'fix', text: 'Custom entries no longer list internal bookkeeping (Custom / Status) in their stat block, and Magic Item cards without a set price no longer read "Cost -".' },
     ],
   },
   {

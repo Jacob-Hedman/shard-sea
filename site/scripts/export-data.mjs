@@ -398,7 +398,8 @@ exportKind('magic_item', (rec) => {
   rec.description = rec.attrs.description || '';
   return {
     facets: { category: arr(rec.category), type: rec.record_type ? [rec.record_type] : [] },
-    sub: [rec.record_type || rec.category, rec.cost ? `Cost ${rec.cost}` : ''].filter(Boolean).join(' · '),
+    // '-' / '?' (no set price) reads as noise on a card; the stat block still shows it
+    sub: [rec.record_type || rec.category, /\d/.test(rec.cost) ? `Cost ${rec.cost}` : ''].filter(Boolean).join(' · '),
     desc: rec.summary || rec.effects || rec.description,
   };
 });
