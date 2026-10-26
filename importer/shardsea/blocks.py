@@ -15,6 +15,12 @@ from dataclasses import dataclass, field
 from . import text as T
 
 
+# Attribute keys the PHB has renamed between versions: old label -> current label.
+# Normalised on parse so typed columns, the site and the changelog see one key
+# (v1.9 renamed *Qualities* to *Traits*, but not in every file).
+ATTR_ALIASES = {"Qualities": "Traits"}
+
+
 @dataclass
 class RecordPattern:
     """A name-line matcher. `regex` must expose a 'name' group; 'num' optional."""
@@ -128,7 +134,7 @@ def parse_block(block: Block, header_line: str) -> dict:
         # attribute line (`*Key*: val| *Key2*: val`) — only if it truly has pairs
         if T.looks_like_attr_line(s):
             for k, v in T.parse_attr_line(s):
-                attrs[k] = v
+                attrs[ATTR_ALIASES.get(k, k)] = v
             continue
 
         # a lone italic label opens a sub-section (Limits, Counter-Action, ...)

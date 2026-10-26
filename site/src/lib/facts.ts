@@ -47,7 +47,7 @@ export function factsFor(rec: any): Fact[] {
   const a = rec.attrs ?? {};
   switch (rec.kind) {
     case 'action':
-      return mk([['Type', rec.action_type], ['AP', rec.ap], ['Duration', a.Duration], ['Range', a.Range], ['Resist', a.Resist], ['Qualities', a.Qualities]]);
+      return mk([['Type', rec.action_type], ['AP', rec.ap], ['Duration', a.Duration], ['Range', a.Range], ['Resist', a.Resist], ['Traits', a.Traits ?? a.Qualities]]);
     case 'armor':
       return mk([['Type', rec.armor_kind], ['Tier', tier(rec)], ['Cost', rec.cost], ['Bulk', rec.bulk], ['Durability', rec.durability], ['Movement penalty', rec.movement_penalty], ['Resources', rec.resources], ['Rating', rec.rating]]);
     case 'artifice':
@@ -55,7 +55,7 @@ export function factsFor(rec: any): Fact[] {
     case 'consumable':
       return mk([['Kind', rec.group], ['Tier', tier(rec)], ['Cost', rec.cost]]);
     case 'feat':
-      return mk([['Discipline', rec.discipline_name], ['Skill', rec.skill], [rec.record === 'Prayer' ? 'Prayer' : 'Tier', rec.feat_tier != null ? String(rec.feat_tier) : ''], ['AP', rec.ap], ['Qualities', rec.qualities]]);
+      return mk([['Discipline', rec.discipline_name], ['Skill', rec.skill], [rec.record === 'Prayer' ? 'Prayer' : 'Tier', rec.feat_tier != null ? String(rec.feat_tier) : ''], ['AP', rec.ap], ['Traits', rec.qualities]]);
     case 'material':
       return mk([['Applies to', rec.applies_to], ['Value ×', rec.multiplier]]);
     case 'ritual':

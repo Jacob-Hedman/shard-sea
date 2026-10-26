@@ -97,20 +97,23 @@ def handle_discipline(rel_path, raw, role, page):
     feats, runes = [], []
     for r in _records(raw, role, rel_path):
         summary = r["flavor"] or (r["description"].split("\n")[0] if r["description"] else "")
+        # named sub-effects (*Critical effect*, *Rebound*, *Combination*…) are rules
+        # text too: keep them as attrs so the site shows them and the changelog diffs them
+        subs = {k: v for k, v in r["sublabels"].items() if k != "Limits"}
         if r["kind"] == "rune":
             runes.append(_entity(
                 "rune", r["name"], group=r["group"], summary=summary,
-                effects=r["effects"], attrs=r["attrs"] | {"description": r["description"]},
+                effects=r["effects"], attrs=r["attrs"] | subs | {"description": r["description"]},
                 raw=r["raw"], source=rel_path,
             ))
         else:  # feat / prayer
             is_prayer = r["raw"].lstrip().lower().startswith("prayer")
             feats.append(_entity(
                 "feat", r["name"], group=r["group"], tier=r["num"], summary=summary,
-                effects=r["effects"], attrs=r["attrs"], raw=r["raw"], source=rel_path,
+                effects=r["effects"], attrs=r["attrs"] | subs, raw=r["raw"], source=rel_path,
                 typed=("feat", {
                     "discipline_name": disc_name, "skill": skill, "feat_tier": r["num"],
-                    "ap": r["attrs"].get("AP"), "qualities": r["attrs"].get("Qualities"),
+                    "ap": r["attrs"].get("AP"), "qualities": r["attrs"].get("Traits"),
                     "flavor": r["flavor"] or None, "effect": r["effects"] or None,
                     "limits": r["sublabels"].get("Limits"),
                 }),

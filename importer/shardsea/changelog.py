@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
+
+from .blocks import ATTR_ALIASES
 
 # canonical fields compared for a "modified" diff, in display order
 CORE_FIELDS = ["name", "tier", "group", "summary", "effects"]
@@ -44,7 +47,8 @@ def _canonical(ent: dict) -> dict:
     typed = ent.get("typed")
     if typed:
         for k, v in (typed[1] or {}).items():
-            if k not in ("discipline_name",) and v is not None:
+            # qualities is promoted from attr:Traits — diffing both would double-report
+            if k not in ("discipline_name", "qualities") and v is not None:
                 d.setdefault(k, v)
     return {k: v for k, v in d.items() if v not in (None, "")}
 
@@ -87,14 +91,18 @@ def _field_label(key: str) -> str:
     return FIELD_LABEL.get(key, key.replace("_", " ").title())
 
 
+def _version_key(v: str) -> tuple:
+    m = re.match(r"^\D*(\d+)", v or "")
+    return (int(m.group(1)) if m else -1, v)
+
+
 def previous_version(conn: sqlite3.Connection, version: str) -> str | None:
-    row = conn.execute(
-        "SELECT version FROM snapshot WHERE version != ? "
-        "ORDER BY (SELECT MAX(id) FROM import_run r WHERE r.version = snapshot.version) DESC, version DESC "
-        "LIMIT 1",
-        (version,),
-    ).fetchone()
-    return row[0] if row else None
+    """The highest snapshotted version BELOW `version` (by version number, not import
+    order — so re-importing an older version diffs it against its predecessor, not
+    against a newer book)."""
+    older = [r[0] for r in conn.execute("SELECT DISTINCT version FROM snapshot")
+             if _version_key(r[0]) < _version_key(version)]
+    return max(older, key=_version_key) if older else None
 
 
 def build_snapshot(conn: sqlite3.Connection, version: str, pages: list[dict]) -> None:
@@ -116,8 +124,14 @@ def _load_snapshot(conn: sqlite3.Connection, version: str) -> dict:
     out = {}
     for r in conn.execute(
             "SELECT kind,slug,name,canonical_json,sig FROM snapshot WHERE version=?", (version,)):
-        out[(r["kind"], r["slug"])] = {
-            "name": r["name"], "canon": json.loads(r["canonical_json"]), "sig": r["sig"]}
+        canon = json.loads(r["canonical_json"])
+        # older snapshots may carry since-renamed attr keys; map them to the current
+        # label so a pure rename (e.g. Qualities -> Traits) is not reported as a change
+        for old_k, new_k in ATTR_ALIASES.items():
+            if f"attr:{old_k}" in canon and f"attr:{new_k}" not in canon:
+                canon[f"attr:{new_k}"] = canon.pop(f"attr:{old_k}")
+        canon.pop("qualities", None)
+        out[(r["kind"], r["slug"])] = {"name": r["name"], "canon": canon, "sig": _sig(canon)}
     return out
 
 

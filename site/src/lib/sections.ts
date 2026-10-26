@@ -52,7 +52,7 @@ export const SECTIONS: Section[] = [
 
   // ---- Disciplines & Magic ----
   { kind: 'discipline', icon: 'ti-school', route: 'disciplines', label: 'Disciplines', singular: 'Discipline', group: 'Disciplines & Magic', blurb: 'Trained practices under each Skill, with passive effects and feats.', facets: [f('skill', 'Skill'), f('special', 'Kind')] },
-  { kind: 'feat', icon: 'ti-star', route: 'feats', label: 'Feats', singular: 'Feat', group: 'Disciplines & Magic', blurb: 'Every discipline feat (and prayer), by tier — AP cost, qualities and effect.', facets: [f('skill', 'Skill'), f('discipline', 'Discipline'), f('tier', 'Tier')], defaultSort: 'tier' },
+  { kind: 'feat', icon: 'ti-star', route: 'feats', label: 'Feats', singular: 'Feat', group: 'Disciplines & Magic', blurb: 'Every discipline feat (and prayer), by tier — AP cost, traits and effect.', facets: [f('skill', 'Skill'), f('discipline', 'Discipline'), f('tier', 'Tier')], defaultSort: 'tier' },
   { kind: 'rune', icon: 'ti-sparkles', route: 'runes', label: 'Runes', singular: 'Rune', group: 'Disciplines & Magic', blurb: 'Arcane runes a Mage can etch, grouped by class and tier.', facets: [f('rune_class', 'Class'), f('tier', 'Tier')], defaultSort: 'tier' },
   { kind: 'spells', type: 'pages', pageKey: 'spells', icon: 'ti-wand', route: 'spells', label: 'Spellcasting', singular: 'Spellcasting', group: 'Disciplines & Magic', blurb: 'How Mages channel Aether and form runes into spells.', facets: [] },
   { kind: 'ritual', icon: 'ti-flame', route: 'rituals', label: 'Rituals', singular: 'Ritual', group: 'Disciplines & Magic', blurb: 'Arcane rituals — runes, reagents, casting time and effect.', facets: [] },
