@@ -5,21 +5,36 @@ import {
   ABILITIES, ABILITY_LABEL, SKILLS, PRINCIPAL_SKILLS, INJURY_REMOVAL,
   MAX_SKILLS, MAX_PRINCIPAL, TIER_COST_CUMULATIVE, CREATION_EXP, AP_PER_TURN, PANIC_POOL,
   MELEE_SKILLS, SPEEDS, HOUSE_ST_BASE, HOUSE_INJURY_STEPS, DEGREES_PER_TIER,
-  ABILITY_ADVANCE_PER_TIER, MAX_TIER,
+  ABILITY_ADVANCE_PER_TIER, MAX_TIER, MAJOR_INFECTION_DAYS, INITIATIVE_DIE,
   abilityBonus, adjustedAbility, disciplineCost, disciplineNextCost, disciplineRank,
   disciplineCapPerSkill, disciplineCapTotal, abilityAdvanceCost, foundryRoll,
   corruptionBand, corruptionPool, depravity, reserve as reserveFn, panicPool,
-  resistDC, sizeFor, parseBulk, majorInfectionDays,
+  resistDC, sizeFor, parseBulk, recoveryTime,
 } from './rules.mjs';
 
 const ex = (value, formula, parts = []) => ({ value, formula, parts });
 const num = (v) => (typeof v === 'number' && !Number.isNaN(v) ? v : 0);
 const numFrom = (v) => (typeof v === 'number' ? v : Number(String(v ?? '').replace(/[^\d.-]/g, '')) || 0);
 
-/** Strain is stored as three tracked types; older docs stored a single number. */
+/** Strain is a single number (PHB v19). Pre-v19 docs stored three tracked types; their
+ *  manual totals fold into the one track. */
 function normStrain(s) {
-  if (s && typeof s === 'object') return { standard: num(s.standard), persistent: num(s.persistent), permanent: num(s.permanent) };
-  return { standard: num(s), persistent: 0, permanent: 0 };
+  if (s && typeof s === 'object') return Math.max(0, num(s.standard) + num(s.persistent) + num(s.permanent));
+  return Math.max(0, num(s));
+}
+const normPenalty = (p) => ({ body: Math.max(0, num(p?.body)), mind: Math.max(0, num(p?.mind)), reflex: Math.max(0, num(p?.reflex)) });
+/** Injuries carry the Damage that caused them (sets Recovery Time) and the Ability
+ *  losses their result inflicts. Pre-v19 docs stored `strain` — that was the Damage. */
+export function normInjury(i = {}) {
+  const severity = String(i.severity || 'Minor');
+  const damage = Math.max(0, num(i.damage ?? i.strain));
+  return {
+    id: i.id || '', name: String(i.name || 'Injury'), severity, damage,
+    penalty: normPenalty(i.penalty),
+    treated: !!i.treated,
+    recovery: i.recovery == null ? recoveryTime(severity, damage) : Math.max(0, num(i.recovery)),
+    note: String(i.note || ''),
+  };
 }
 
 /** Fill any missing fields so a partial/old document derives without throwing. */
@@ -38,9 +53,10 @@ export function normalizeCharacter(c = {}) {
     abilities: { body: mk(ab.body), mind: mk(ab.mind), reflex: mk(ab.reflex) },
     abilityStart: c.abilityStart || null,
     strain: normStrain(c.strain),
+    noRestDays: Math.max(0, num(c.noRestDays)),
     corruption: num(c.corruption),
     conditions: Array.isArray(c.conditions) ? c.conditions : [],
-    injuries: Array.isArray(c.injuries) ? c.injuries : [],
+    injuries: Array.isArray(c.injuries) ? c.injuries.map(normInjury) : [],
     expEarned: c.expEarned == null ? CREATION_EXP : num(c.expEarned),
     money: num(c.money),
     skills: Array.isArray(c.skills) ? c.skills : [],
@@ -61,41 +77,43 @@ export function derive(raw) {
   const c = normalizeCharacter(raw);
   const tier = c.tier;
 
-  // --- Reserve & the strain penalty (strain only hurts once it passes Reserve) ---
-  const baseBodyBonus = abilityBonus(c.abilities.body.base + c.abilities.body.bonus);
-  const reserve = reserveFn(tier, baseBodyBonus);
-  // Injuries each carry Permanent Strain equal to their Damage (PHB a_Health).
-  const injuries = c.injuries.map((i) => {
-    const strain = num(i.strain);
-    const severity = String(i.severity || 'Minor');
-    return {
-      id: i.id || '', name: String(i.name || 'Injury'), severity, strain, note: String(i.note || ''),
-      removal: INJURY_REMOVAL[severity] || '—',
-      // an untreated Major injury kills you on a timer (PHB b_Attacks §Treating Injuries)
-      infectionDays: severity === 'Major' ? majorInfectionDays(strain) : null,
-    };
-  });
-  const injuryStrain = injuries.reduce((s, i) => s + i.strain, 0);
-  const strainTracks = {
-    standard: c.strain.standard,
-    persistent: c.strain.persistent,
-    permanent: c.strain.permanent + injuryStrain,   // permanent strain = manual + all injuries
+  // --- Injuries: in v19 they lower Abilities directly, until healed (PHB b_Attacks) ---
+  const injuries = c.injuries.map((i) => ({
+    ...i,
+    removal: INJURY_REMOVAL[i.severity] || '—',
+    // an untreated Major injury kills you on a timer (PHB b_Attacks §Treating Injuries)
+    infectionDays: i.severity === 'Major' && !i.treated ? MAJOR_INFECTION_DAYS : null,
+  }));
+  const lowersFor = (a) => {
+    const inj = injuries.reduce((s, i) => s + i.penalty[a], 0);
+    return [
+      ...(inj ? [{ label: 'injuries', value: inj }] : []),
+      // "Each Day you spend without Resting at all reduces your Mind by one" (PHB v19 d_Rest)
+      ...(a === 'mind' && c.noRestDays ? [{ label: 'no Rest', value: c.noRestDays }] : []),
+    ];
   };
-  const strain = strainTracks.standard + strainTracks.persistent + strainTracks.permanent;
+  const lowers = Object.fromEntries(ABILITIES.map((a) => [a, lowersFor(a)]));
+  const loweredTotal = (a) => lowers[a].reduce((s, l) => s + l.value, 0);
+  const naturalOf = (a) => Math.max(0, c.abilities[a].base + c.abilities[a].bonus - loweredTotal(a));
+
+  // --- Reserve & the strain penalty (strain only hurts once it passes Reserve) ---
+  const reserve = reserveFn(tier, abilityBonus(naturalOf('body')));
+  const strain = c.strain;
   const strainPenalty = Math.max(0, strain - reserve.value);
 
   // --- abilities ---
   const ability = {};
   for (const a of ABILITIES) {
     const { base, bonus, temp, tax } = c.abilities[a];
-    const adj = adjustedAbility(base, bonus, temp, strainPenalty, tax);
+    const adj = adjustedAbility(base, bonus, temp, strainPenalty, tax, lowers[a]);
     ability[a] = {
       key: a, label: ABILITY_LABEL[a], base, bonus, temp, tax,
+      lowered: loweredTotal(a),
       // Threshold FEATS gate on BASE alone (permanent bonuses like Diablerie raise the
       // value but never grant the Feat — PHB f-Ability Thresholds). The Ability BONUS to
-      // Skills and Reserve DO count the permanent bonus, so they read `permanent`.
-      permanent: base + bonus,              // the Ability-Bonus / Reserve score (bonuses count)
-      natural: base + bonus,                // "Natural" = absent Strain and Taxation (PHB a_Health)
+      // Skills DOES count the permanent bonus, so it reads `permanent`.
+      permanent: base + bonus,              // the Ability-Bonus score (bonuses count)
+      natural: naturalOf(a),                // "Natural" = absent Strain and Taxation (PHB a_Health)
       adjusted: adj,
       bonusVal: abilityBonus(adj.value),
       bonusExplain: ex(`+${abilityBonus(adj.value)}`, `⌊${adj.value} ÷ 6⌋`),
@@ -137,9 +155,16 @@ export function derive(raw) {
     ...(penalty ? [{ label: 'over-encumbered', value: -penalty }] : [])];
   const movement = ex(Math.max(0, R - armorMove - penalty),
     armorMove || penalty ? 'Reflex − armor − over-encumbrance' : 'Reflex', moveParts);
-  const initiative = ex(Math.max(0, R - penalty),
-    penalty ? 'Reflex − over-encumbrance (ties: Body → Mind)' : 'Reflex (ties: Body → Mind)',
-    [{ label: 'Reflex', value: R }, ...(penalty ? [{ label: 'over-encumbered', value: -penalty }] : [])]);
+  // v19: Initiative is rolled — 1d6 + Reflex, highest first (PHB b_Combat §Who Goes First).
+  // `value` is the modifier added to the die.
+  const initMod = Math.max(0, R - penalty);
+  const initiative = {
+    ...ex(initMod,
+      penalty ? `${INITIATIVE_DIE} + Reflex − over-encumbrance` : `${INITIATIVE_DIE} + Reflex`,
+      [{ label: 'Reflex', value: R }, ...(penalty ? [{ label: 'over-encumbered', value: -penalty }] : [])]),
+    die: INITIATIVE_DIE,
+    roll: `/r ${INITIATIVE_DIE} + ${initMod} # Initiative`,
+  };
   const speeds = SPEEDS.map((s) => ({ ...s, value: Math.floor(movement.value / s.div) }));
   const ap = ex(AP_PER_TURN, 'gained at start of Turn (max 3)');
   const mindBonus = ability.mind.bonusVal;
@@ -255,9 +280,6 @@ export function derive(raw) {
 
   // Any Ability driven to 0 (usually by Strain over Reserve) = Incapacitated (PHB a_Health).
   const incapacitated = [B, M, R].some((v) => v <= 0);
-  // Overload: permanent (injury) strain alone is enough to incapacitate → out until treated.
-  const permOnlyPenalty = Math.max(0, strainTracks.permanent - reserve.value);
-  const overload = ABILITIES.some((a) => (c.abilities[a].base + c.abilities[a].bonus - permOnlyPenalty) <= 0);
 
   // --- validation warnings ---
   const warnings = [];
@@ -272,14 +294,15 @@ export function derive(raw) {
   if (penalty > 0) warnings.push(`Over-encumbered by ${penalty} Bulk — Movement ${movement.value}, Initiative ${initiative.value}.`);
   if (penalty > 0 && (movement.value === 0 || initiative.value === 0)) warnings.push(`Movement or Initiative has reached 0 — you must drop something.`);
   if (strainPenalty > 0) warnings.push(`Strain ${strain} exceeds Reserve ${reserve.value} — all abilities & derived stats −${strainPenalty}.`);
-  if (incapacitated) warnings.push(`Incapacitated — Unconscious 1d6 minutes, Helpless (all hits land as Lethal).`);
-  if (overload) warnings.push(`Overload — Injury Strain alone incapacitates you; Unconscious until it is treated.`);
+  if (incapacitated) warnings.push(`Incapacitated — Unconscious 1d6 minutes, Helpless (all hits land as Lethal). Second Wind: then shed all Strain, suffer 1d6 Corruption.`);
+  for (const i of injuries) if (i.infectionDays != null) warnings.push(`${i.name} is an untreated Major Injury — systemic infection kills after ${i.infectionDays} Days without Surgical Treatment.`);
+  if (c.noRestDays) warnings.push(`${c.noRestDays} Day${c.noRestDays === 1 ? '' : 's'} without Rest — Mind −${c.noRestDays} until you Rest three Watches.`);
   if (corruption.terminal) warnings.push(`Terminal Corruption (${c.corruption}) — you Fall, or take a Fixation instead.`);
 
   return {
     char: c, tier, size, height: c.height, weight,
     ability, movement, speeds, initiative, ap, reserve,
-    strain, strainTracks, strainPenalty, injuryStrain, injuries, incapacitated, overload,
+    strain, strainPenalty, injuries, incapacitated, noRestDays: c.noRestDays,
     conditions: c.conditions,
     maxEnc, carried: carriedRounded, stowed, penalty, push, lift, panic,
     houseDt, houseSt, houseShakes,

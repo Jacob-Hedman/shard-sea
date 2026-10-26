@@ -16,7 +16,7 @@ function newChar() {
     name: 'New Character', tier: 1, height: 1.8, archetype: null, fixation: null, background: null,
     abilities: { body: { base: 3, bonus: 0, temp: 0, tax: 0 }, mind: { base: 3, bonus: 0, temp: 0, tax: 0 }, reflex: { base: 3, bonus: 0, temp: 0, tax: 0 } },
     abilityStart: { body: 3, mind: 3, reflex: 3 },
-    strain: { standard: 0, persistent: 0, permanent: 0 }, corruption: 0, expEarned: 500, money: 0,
+    strain: 0, noRestDays: 0, corruption: 0, expEarned: 500, money: 0,
     conditions: [], injuries: [],
     skills: [], disciplines: [], feats: [], items: [], notes: '',
     expLedger: [],
@@ -76,7 +76,8 @@ export async function initBuilder(el: HTMLElement) {
       const a = char.abilities[k] || {};
       char.abilities[k] = { base: Number(a.base) || 0, bonus: Number(a.bonus) || 0, temp: Number(a.temp) || 0, tax: Math.max(0, Number(a.tax) || 0) };
     }
-    if (!char.strain || typeof char.strain !== 'object') char.strain = { standard: Number(char.strain) || 0, persistent: 0, permanent: 0 };
+    if (char.strain && typeof char.strain === 'object') char.strain = (Number(char.strain.standard) || 0) + (Number(char.strain.persistent) || 0) + (Number(char.strain.permanent) || 0);
+    char.strain = Math.max(0, Number(char.strain) || 0);
     for (const k of ['expLedger', 'conditions', 'injuries', 'items', 'skills', 'disciplines', 'feats', 'noteSections'])
       if (!Array.isArray(char[k])) char[k] = [];
     if (!char.height) char.height = 1.8;

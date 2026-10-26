@@ -1,13 +1,14 @@
 // Playable character sheet. Read-only for the built character (abilities, skills,
-// disciplines, equipment, XP, notes) but LIVE for play-state — strain (three PHB
-// types), conditions, injuries, armor notches, corruption, taxed and temporary
+// disciplines, equipment, XP, notes) but LIVE for play-state — strain (one PHB v19
+// track), conditions, injuries, armor notches, corruption, taxed and temporary
 // ability points, money and character art are all changed here and autosaved.
 // Click any skill, ability, discipline or weapon to build a copy-paste Foundry roll.
 import { api, esc, openRoll } from './charApi';
 import { derive } from '../lib/character/derive.mjs';
 import {
-  STRAIN_TYPES, DAMAGE_TYPES, BASE_DAMAGE, INJURY_SEVERITIES, CONDITION_COUNTERS,
+  DAMAGE_TYPES, BASE_DAMAGE, INJURY_SEVERITIES, CONDITION_COUNTERS,
   STACKING_CONDITIONS, weaponDamage, parseBulk, MELEE_SKILLS, RANGED_SKILLS, ratingCovers,
+  catchBreath, restShed, activityShed, recoveryTime,
 } from '../lib/character/rules.mjs';
 import { hrefFor } from '../lib/sections';
 
@@ -122,10 +123,21 @@ function ensureShape(c: any) {
     const a = c.abilities[k] && typeof c.abilities[k] === 'object' ? c.abilities[k] : {};
     c.abilities[k] = { base: Number(a.base) || 0, bonus: Number(a.bonus) || 0, temp: Number(a.temp) || 0, tax: Math.max(0, Number(a.tax) || 0) };
   }
-  if (!c.strain || typeof c.strain !== 'object') c.strain = { standard: Number(c.strain) || 0, persistent: 0, permanent: 0 };
-  for (const k of ['standard', 'persistent', 'permanent']) c.strain[k] = Math.max(0, Number(c.strain[k]) || 0);
+  // PHB v19: one Strain track — fold a pre-v19 three-type object into it
+  if (c.strain && typeof c.strain === 'object') c.strain = (Number(c.strain.standard) || 0) + (Number(c.strain.persistent) || 0) + (Number(c.strain.permanent) || 0);
+  c.strain = Math.max(0, Number(c.strain) || 0);
+  c.noRestDays = Math.max(0, Number(c.noRestDays) || 0);
   for (const k of ['conditions', 'injuries', 'items', 'skills', 'disciplines', 'feats', 'noteSections', 'expLedger'])
     if (!Array.isArray(c[k])) c[k] = [];
+  // v19 injuries: `damage` (was `strain`), Ability `penalty`, Recovery Time
+  for (const i of c.injuries) {
+    if (i.damage == null) i.damage = Math.max(0, Number(i.strain) || 0);
+    delete i.strain;
+    const p = i.penalty || {};
+    i.penalty = { body: Math.max(0, Number(p.body) || 0), mind: Math.max(0, Number(p.mind) || 0), reflex: Math.max(0, Number(p.reflex) || 0) };
+    i.treated = !!i.treated;
+    if (i.recovery == null) i.recovery = recoveryTime(i.severity, i.damage);
+  }
   c.corruption = Math.max(0, Number(c.corruption) || 0);
   c.money = Number(c.money) || 0;
   c.tier = Number(c.tier) || 1;
@@ -295,36 +307,37 @@ function alertsHtml(d: any) {
 
 // ---- live play panel ---------------------------------------------------
 function strainCardHtml(d: any) {
-  const trackRow = (t: any) => {
-    const injPart = t.key === 'permanent' && d.injuryStrain ? ` +${d.injuryStrain} from injuries` : '';
-    const v = char.strain[t.key];
-    return `<div class="cs-track">
-      <span class="cs-track-lbl"><span class="cs-mark">${t.mark}</span> ${t.label}</span>
-      <span class="cs-stepper">
-        ${stepBtns('data-strain', t.key, [-1], t.label + ' strain')}
-        <span class="cs-count ${v ? 'on' : ''}">${v}</span>
-        ${stepBtns('data-strain', t.key, [1], t.label + ' strain')}</span>
-      <span class="cs-f cs-track-note">${t.sheds}${injPart}</span></div>`;
-  };
+  const over = d.strain > d.reserve.value;
   return `<div class="card cs-play-card">
     <div class="cs-lbl">Strain</div>
     <div class="cs-big-row">
-      <span class="cs-num cs-big ${d.strainPenalty ? 'bad' : ''}">${d.strain}</span>
+      <span class="cs-stepper">
+        ${stepBtns('data-strain', 's', [-1], 'strain')}
+        <span class="cs-num cs-big ${d.strainPenalty ? 'bad' : ''}">${d.strain}</span>
+        ${stepBtns('data-strain', 's', [1], 'strain')}</span>
       <span class="cs-of">of <b>${d.reserve.value}</b> Reserve</span></div>
     ${fLine(d.reserve)}
     <div class="cs-f ${d.strainPenalty ? 'bad' : ''}">${d.strainPenalty
       ? `over by <b>${d.strainPenalty}</b> → all abilities &amp; derived stats −${d.strainPenalty}`
       : 'within Reserve — no penalty'}</div>
-    ${STRAIN_TYPES.map(trackRow).join('')}
     <div class="cs-btn-row">
-      <button type="button" class="cs-btn" data-rest="breath" title="10 minutes' inactivity: shed all Standard strain and clear all Tax">Catch breath</button>
-      <button type="button" class="cs-btn" data-rest="w1" title="One Watch: shed all Standard, Persistent −Tier">Rest 1w</button>
-      <button type="button" class="cs-btn" data-rest="w2" title="Two Watches: shed all Standard, half Persistent">2w</button>
-      <button type="button" class="cs-btn" data-rest="w3" title="Three Watches: shed all Standard and Persistent">3w</button>
-      <button type="button" class="cs-btn" data-rest="w4" title="Four Watches: as 3w, and every Injury's recovery time drops by one">4w</button>
-      ${d.incapacitated && !d.overload ? `<button type="button" class="cs-btn cs-btn-gold" data-rest="wake" title="After 1d6 minutes: shed all Standard strain and all Persistent above Reserve">Wake</button>` : ''}
+      <button type="button" class="cs-btn" data-rest="breath" ${over ? 'disabled' : ''} title="One Minute: shed all Strain — only if not over your Reserve">Catch breath</button>
+      <button type="button" class="cs-btn" data-rest="w1" title="One Watch: shed Strain equal to your Tier; clears Tax">Rest 1w</button>
+      <button type="button" class="cs-btn" data-rest="w2" title="Two Watches: shed twice your Tier + your Reserve; clears Tax">2w</button>
+      <button type="button" class="cs-btn" data-rest="w3" title="Three Watches: shed all Strain; clears Tax and Days without Rest">3w</button>
+      <button type="button" class="cs-btn" data-rest="w4" title="Four Watches: as 3w, and every Injury's Recovery time drops by one">4w</button>
+      ${d.incapacitated ? `<button type="button" class="cs-btn cs-btn-gold" data-rest="second-wind" title="After being Incapacitated: shed all Strain, suffer 1d6 Corruption">Second Wind</button>` : ''}
     </div>
-    <div class="cs-f">Injury strain needs healing, not rest.</div>
+    <div class="cs-lbl cs-sub">10-minute Activities — shed 1, all if that brings you to Reserve</div>
+    <div class="cs-btn-row">
+      <button type="button" class="cs-btn" data-act="steady" title="Sure: if Initiative starts during this Activity, you go first in Round 1">Steady</button>
+      <button type="button" class="cs-btn" data-act="contemplate" title="Studied Advantage: a Boon for any Test over the next Day, up to your Tier">Contemplate</button>
+      <button type="button" class="cs-btn" data-act="lay-back" title="Circulation: reduce one Injury's Recovery time by one (once per Day per Injury)">Lay Back</button>
+      <button type="button" class="cs-btn" data-act="brood" title="Negative Feedback: also suffer 1 Corruption to shed 1d6 Strain">Brood</button>
+    </div>
+    <div class="cs-f">Days without Rest
+      <span class="cs-stepper">${stepBtns('data-norest', 'n', [-1], 'days without rest')}<span class="cs-count ${d.noRestDays ? 'on' : ''}">${d.noRestDays}</span>${stepBtns('data-norest', 'n', [1], 'days without rest')}</span>
+      — Mind −1 each, until you Rest three Watches</div>
   </div>`;
 }
 
@@ -381,7 +394,8 @@ function damageCardHtml(d: any) {
     <details class="cs-mini"><summary>how damage resolves</summary>
       <div class="cs-f">Armor Rated for the type negates it and takes Notches equal to the Damage; past its
         Durability it Breaks and you take the rest. Otherwise roll 2d6 on that type's
-        <a class="cs-link" href="/damage">Injury Risk table</a> — the Injury carries Permanent Strain equal to the Damage.</div>
+        <a class="cs-link" href="/damage">Injury Risk table</a>. When Injured you suffer Strain equal to the Damage, and the
+        result may lower your Abilities until it heals. Recovery Time is 10 × the Damage (×3 again for Major, after Surgery).</div>
     </details>
   </div>`;
 }
@@ -411,24 +425,36 @@ function conditionsCardHtml(d: any) {
 }
 
 function injuriesCardHtml(d: any) {
+  const lows = (p: any) => (['body', 'mind', 'reflex'] as const).filter((k) => p[k]).map((k) => `${cap(k)} −${p[k]}`).join(' · ');
   const rows = d.injuries.map((inj: any, i: number) => `
     <div class="cs-eq">
       <div class="et">
         <span class="cs-sev ${sevClass(inj.severity)}">${esc(inj.severity)}</span>
         <b>${esc(inj.name)}</b>
-        <span class="cs-pill">+${inj.strain} permanent strain</span>
+        ${lows(inj.penalty) ? `<span class="cs-pill">${esc(lows(inj.penalty))}</span>` : ''}
         <button type="button" class="cs-x" data-delinj="${i}" aria-label="remove ${esc(inj.name)}">✕</button>
       </div>
-      <div class="cs-f">Removed by ${esc(inj.removal)}${inj.infectionDays != null ? ` · untreated: dead in ${inj.infectionDays} days (systemic infection)` : ''}</div>
+      <div class="cs-f">Removed by ${esc(inj.removal)} · Damage ${inj.damage}
+        ${inj.severity === 'Major' ? ` · <label><input type="checkbox" data-injtreated="${i}" ${inj.treated ? 'checked' : ''}> treated</label>` : ''}
+        ${inj.recovery != null && (inj.severity !== 'Major' || inj.treated) ? ` · Recovery <span class="cs-stepper">${stepBtns('data-injrec', String(i), [-1], 'recovery time')}<span class="cs-count">${inj.recovery}</span>${stepBtns('data-injrec', String(i), [1], 'recovery time')}</span>` : ''}
+        ${inj.infectionDays != null ? ` · untreated: dead after ${inj.infectionDays} Days (systemic infection)` : ''}</div>
       <input class="cs-input cs-note-in" data-injnote="${i}" value="${esc(inj.note)}" placeholder="note (location, infected, GM ruling…)">
     </div>`).join('') || '<div class="cs-f cs-empty">No injuries.</div>';
   return `<div class="card">
-    <div class="cs-lbl cs-card-pad">Injuries — each adds Permanent Strain</div>
+    <div class="cs-lbl cs-card-pad">Injuries — lower Abilities until healed</div>
     ${rows}
     <div class="cs-add-row">
       <select class="cs-select cs-sev-sel" id="cs-inj-sev" aria-label="injury severity">${INJURY_SEVERITIES.map((s) => `<option>${s}</option>`).join('')}</select>
       <input class="cs-input" id="cs-inj-name" placeholder="Injury (e.g. Gash)" aria-label="injury name">
-      <input class="cs-input num cs-inj-strain" id="cs-inj-strain" type="number" value="1" aria-label="permanent strain">
+      <input class="cs-input num cs-inj-strain" id="cs-inj-dmg" type="number" value="1" min="0" aria-label="damage" title="Damage">
+    </div>
+    <div class="cs-add-row">
+      <span class="cs-f">lowers</span>
+      <input class="cs-input num cs-inj-strain" id="cs-inj-body" type="number" value="0" min="0" aria-label="Body lowered" title="Body −">
+      <input class="cs-input num cs-inj-strain" id="cs-inj-mind" type="number" value="0" min="0" aria-label="Mind lowered" title="Mind −">
+      <input class="cs-input num cs-inj-strain" id="cs-inj-reflex" type="number" value="0" min="0" aria-label="Reflex lowered" title="Reflex −">
+      <span class="cs-f">B / M / R</span>
+      <label class="cs-f"><input type="checkbox" id="cs-inj-take" checked> take Strain = Damage</label>
       <button type="button" class="cs-btn cs-btn-gold" id="cs-inj-add">+ Add</button></div></div>`;
 }
 
@@ -450,7 +476,7 @@ function abilitiesHtml(d: any) {
         ${stepBtns('data-atax', k, [-1], a.label + ' tax')}<span class="cs-count">${a.tax}</span>${stepBtns('data-atax', k, [1], a.label + ' tax')}
         <button class="cs-roll-link" data-roll="ability" data-a="${k}">⚄ check</button>
       </div>
-      <div class="cs-f">Tax −1 to auto-succeed a related Test; cleared by Catching your Breath.</div>
+      <div class="cs-f">Tax −1 to auto-succeed a related Test; cleared by Resting.</div>
     </div>`;
   }).join('');
 }
@@ -462,8 +488,9 @@ function vitalsHtml(d: any) {
       <div class="v cs-num">${d.movement.value} <small>m</small></div>${fLine(d.movement)}
       <div class="cs-ladder">${d.speeds.map((s: any) => `<span class="cs-sev">${esc(s.label)} ${s.value}</span>`).join('')}</div></div>
     <div class="cs-vital card"><div class="cs-lbl">Initiative</div>
-      <div class="v cs-num">${d.initiative.value}</div>${fLine(d.initiative)}
-      <div class="cs-f">Highest goes first · ties Reflex → Body → Mind</div></div>
+      <div class="v cs-num"><small>${esc(d.initiative.die)} +</small> ${d.initiative.value}</div>${fLine(d.initiative)}
+      <button class="cs-roll-link" data-roll="init" title="${esc(d.initiative.roll)}">⚄ copy roll</button>
+      <div class="cs-f">Roll at the start · highest goes first · ties Reflex → Body → Mind</div></div>
     <div class="cs-vital card"><div class="cs-lbl">AP / turn</div>
       <div class="v cs-num">${d.ap.value}</div>${fLine(d.ap)}
       <div class="cs-f">Spare AP carries for Reactions; excess is lost</div></div>
@@ -705,7 +732,7 @@ function snapshotUi() {
     condPick: g('cs-cond-pick')?.value,
     injSev: g('cs-inj-sev')?.value,
     injName: g('cs-inj-name')?.value,
-    injStrain: g('cs-inj-strain')?.value,
+    injDmg: g('cs-inj-dmg')?.value,
     dmgN: g('cs-dmg-n')?.value,
     dmgType: g('cs-dmg-type')?.value,
     focus: (document.activeElement as HTMLElement)?.getAttribute?.('data-k') || null,
@@ -716,7 +743,7 @@ function restoreUi(s: any) {
   const set = (id: string, v: any) => { const el = g(id); if (el != null && v != null) el.value = v; };
   if (g('cs-actions') && s.actionsOpen) (g('cs-actions') as HTMLDetailsElement).open = true;
   set('cs-cond-pick', s.condPick); set('cs-inj-sev', s.injSev); set('cs-inj-name', s.injName);
-  set('cs-inj-strain', s.injStrain); set('cs-dmg-n', s.dmgN); set('cs-dmg-type', s.dmgType);
+  set('cs-inj-dmg', s.injDmg); set('cs-dmg-n', s.dmgN); set('cs-dmg-type', s.dmgType);
   if (s.focus) (mount.querySelector(`[data-k="${s.focus}"]`) as HTMLElement)?.focus();
   window.scrollTo({ top: s.scrollY });
 }
@@ -777,8 +804,11 @@ function bindPlay() {
   on('[data-money]', 'click', (el) => { char.money = Math.max(0, (Number(char.money) || 0) + Number(el.dataset.d)); markDirty(); reRender(); });
   on('[data-corr]', 'click', (el) => { char.corruption = Math.max(0, (Number(char.corruption) || 0) + Number(el.dataset.d)); markDirty(); reRender(); });
   on('[data-strain]', 'click', (el) => {
-    const k = el.dataset.strain!;
-    char.strain[k] = Math.max(0, (Number(char.strain[k]) || 0) + Number(el.dataset.d));
+    char.strain = Math.max(0, (Number(char.strain) || 0) + Number(el.dataset.d));
+    markDirty(); reRender();
+  });
+  on('[data-norest]', 'click', (el) => {
+    char.noRestDays = Math.max(0, (Number(char.noRestDays) || 0) + Number(el.dataset.d));
     markDirty(); reRender();
   });
   on('[data-atemp]', 'click', (el) => { const k = el.dataset.atemp!; char.abilities[k].temp = (Number(char.abilities[k].temp) || 0) + Number(el.dataset.d); markDirty(); reRender(); });
@@ -791,20 +821,41 @@ function bindPlay() {
     const it = char.items.find((i: any) => i.id === el.dataset.notch);
     if (it) { it.notches = Math.max(0, (Number(it.notches) || 0) + Number(el.dataset.d)); markDirty(); reRender(); }
   });
-  // rest / catch breath (PHB d_Rest). Catching your Breath also clears Taxed abilities.
+  // rest / catch breath / second wind (PHB v19 a_Health, d_Rest). Tax lasts until you Rest.
   on('[data-rest]', 'click', (el) => {
     const mode = el.dataset.rest!;
-    const P = Number(char.strain.persistent) || 0;
-    if (mode === 'wake') {                        // waking from Incapacitation (PHB a_Health)
-      char.strain.standard = 0;
-      char.strain.persistent = Math.min(P, derive(char).reserve.value);
+    const d = derive(char);
+    const S = Number(char.strain) || 0;
+    if (mode === 'breath') {
+      char.strain = catchBreath(S, d.reserve.value);
+    } else if (mode === 'second-wind') {
+      const r = window.prompt('Second Wind — you shed all Strain and suffer 1d6 Corruption.\n\nEnter the d6 result:', '');
+      if (r == null) return;
+      char.strain = 0;
+      char.corruption = Math.max(0, (Number(char.corruption) || 0) + Math.max(0, Math.min(6, Number(r) || 0)));
     } else {
-      char.strain.standard = 0;
+      const watches = Number(mode.slice(1));
+      char.strain = restShed(S, watches, d.tier, d.reserve.value);
       for (const k of ['body', 'mind', 'reflex']) char.abilities[k].tax = 0;
-      if (mode === 'w1') char.strain.persistent = Math.max(0, P - (Number(char.tier) || 1));
-      else if (mode === 'w2') char.strain.persistent = Math.floor(P / 2);
-      else if (mode === 'w3' || mode === 'w4') char.strain.persistent = 0;
+      if (watches >= 3) char.noRestDays = 0;
+      if (watches >= 4) for (const i of char.injuries) if (i.recovery != null && i.recovery > 0) i.recovery -= 1;
     }
+    markDirty(); reRender();
+  });
+  // the four v19 ten-minute Exclusive Activities that shed Strain (PHB d_Activities)
+  on('[data-act]', 'click', (el) => {
+    const act = el.dataset.act!;
+    const d = derive(char);
+    let S = Number(char.strain) || 0;
+    if (act === 'brood') {
+      const r = window.prompt('Brood — suffer 1 Corruption to shed 1d6 Strain.\n\nEnter the d6 result (blank to skip the trade):', '');
+      if (r == null) return;
+      if (r.trim()) {
+        char.corruption = (Number(char.corruption) || 0) + 1;
+        S = Math.max(0, S - Math.max(0, Math.min(6, Number(r) || 0)));
+      }
+    }
+    char.strain = activityShed(S, d.reserve.value);
     markDirty(); reRender();
   });
 
@@ -844,11 +895,24 @@ function bindPlay() {
   document.getElementById('cs-inj-add')?.addEventListener('click', () => {
     const sev = (document.getElementById('cs-inj-sev') as HTMLSelectElement).value;
     const name = (document.getElementById('cs-inj-name') as HTMLInputElement).value.trim() || 'Injury';
-    const strain = Math.max(0, Number((document.getElementById('cs-inj-strain') as HTMLInputElement).value) || 0);
-    char.injuries.push({ id: crypto.randomUUID(), name, severity: sev, strain, note: '' });
+    const val = (id: string) => Math.max(0, Number((document.getElementById(id) as HTMLInputElement).value) || 0);
+    const damage = val('cs-inj-dmg');
+    const penalty = { body: val('cs-inj-body'), mind: val('cs-inj-mind'), reflex: val('cs-inj-reflex') };
+    char.injuries.push({ id: crypto.randomUUID(), name, severity: sev, damage, penalty, treated: false, recovery: recoveryTime(sev, damage), note: '' });
+    // "When Injured, you suffer Strain equal the Damage" (PHB v19 a_Health)
+    if ((document.getElementById('cs-inj-take') as HTMLInputElement)?.checked) char.strain = (Number(char.strain) || 0) + damage;
     markDirty(); render();     // full render: the add form should reset
   });
   on('[data-delinj]', 'click', (el) => { char.injuries.splice(Number(el.dataset.delinj), 1); markDirty(); reRender(); });
+  on('[data-injrec]', 'click', (el) => {
+    const inj = char.injuries[Number(el.dataset.injrec)];
+    inj.recovery = Math.max(0, (Number(inj.recovery) || 0) + Number(el.dataset.d));
+    markDirty(); reRender();
+  });
+  on('[data-injtreated]', 'change', (el) => {
+    char.injuries[Number(el.dataset.injtreated)].treated = (el as HTMLInputElement).checked;
+    markDirty(); reRender();
+  });
   on('[data-injnote]', 'input', (el) => { char.injuries[Number(el.dataset.injnote)].note = (el as HTMLInputElement).value; markDirty(); });
 
   // damage resolution
@@ -878,9 +942,9 @@ function bindPlay() {
     const type = (document.getElementById('cs-dmg-type') as HTMLSelectElement).value;
     openRoll({
       label: `Injury Risk — ${cap(type)}`, mod: 0, tier: 0, unskilled: true,
-      note: `roll 2d6 on the ${cap(type)} table, then add the Injury with ${n} Permanent Strain`,
+      note: `roll 2d6 on the ${cap(type)} table, then add the Injury: ${n} Damage → ${n} Strain, plus any Ability loss`,
     });
-    (document.getElementById('cs-inj-strain') as HTMLInputElement).value = String(n);
+    (document.getElementById('cs-inj-dmg') as HTMLInputElement).value = String(n);
     (document.getElementById('cs-inj-name') as HTMLInputElement).value = cap(type) + ' injury';
   });
 }
@@ -898,6 +962,11 @@ function bindRolls(d: any) {
       tier: s.trained ? d.tier : 0, unskilled: !s.trained,
       note: s.trained ? `Tier ${d.tier} + ${abLabel(s)} bonus ${s.abilityBonus}` : `untrained · ${abLabel(s)} bonus ${s.abilityBonus}`,
     });
+  });
+  on('[data-roll="init"]', 'click', (el) => {
+    navigator.clipboard?.writeText(d.initiative.roll).then(() => {
+      const t = el.textContent; el.textContent = '✓ copied'; setTimeout(() => { el.textContent = t; }, 1200);
+    }).catch(() => window.prompt('Initiative roll:', d.initiative.roll));
   });
   on('[data-roll="ability"]', 'click', (el) => {
     const a = d.ability[el.dataset.a!];
