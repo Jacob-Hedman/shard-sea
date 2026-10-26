@@ -3,7 +3,8 @@
 // and node tests. Every derived value is returned as { value, formula, parts } so
 // the UI can always show HOW a number was reached (the project's core requirement).
 //
-// Rules cross-checked line-by-line against the PHB v17 vault. Where the group's
+// Rules cross-checked line-by-line against the PHB v17 vault, updated for v19
+// (single Strain track, Injuries that lower Abilities, rolled Initiative). Where the group's
 // Google Sheet used a manual input that disagreed with the PHB, the PHB wins.
 // Anything the PHB does NOT define is marked HOUSE RULE and labelled as such in the UI.
 
@@ -65,20 +66,23 @@ export function ratingCovers(rating, type) {
   return r.includes(t) || r.includes(String(DAMAGE_CATEGORY[t] || '').toLowerCase());
 }
 
-// Strain comes in three types, tracked separately below your Reserve (PHB a_Health).
-// Their total, in excess of Reserve, is what drops your abilities.
-export const STRAIN_TYPES = [
-  { key: 'standard', label: 'Standard', mark: '/', sheds: 'expires in 10 minutes' },
-  { key: 'persistent', label: 'Persistent', mark: '✕', sheds: 'shed by Resting' },
-  { key: 'permanent', label: 'Permanent', mark: '✱', sheds: 'from Injuries — needs healing' },
-];
+// Strain is a single track below your Reserve (PHB v19 a_Health). Any Strain in
+// excess of Reserve drops every Ability and derived statistic by that excess.
 // How each Injury Severity is removed (PHB b_Attacks §Treating Injuries).
 export const INJURY_REMOVAL = {
-  Minor: 'First-Aid, or Rest',
-  Moderate: 'Recovery — 10× Injury Strain',
-  Major: 'Surgery, then Recovery ×3',
+  Minor: 'First-Aid (Bandaging), or Rest',
+  Moderate: 'Recovery — 10 × the incurring Damage',
+  Major: 'Surgical Treatment, then Recovery — 30 × the incurring Damage',
   Lethal: 'unrecoverable — you are dead',
 };
+/** Default Recovery Time: Moderate = 10 × Damage, Major (after Surgery) = thrice that.
+ *  Minor Injuries have none (First-Aid or Rest removes them). */
+export function recoveryTime(severity, damage) {
+  const d = Math.max(0, Number(damage) || 0);
+  if (severity === 'Moderate') return 10 * d;
+  if (severity === 'Major') return 30 * d;
+  return null;
+}
 export const INJURY_SEVERITIES = ['Minor', 'Moderate', 'Major', 'Lethal'];
 // How each Condition is ended (the PHB's *Counter-Action* notes, f_Conditions / a_Health).
 export const CONDITION_COUNTERS = {
@@ -93,8 +97,8 @@ export const CONDITION_COUNTERS = {
 // Only Doomed_x stacks with itself: "All applications of this Condition stack."
 // Everything else: "The same Condition does not Stack with itself" (PHB f_Conditions).
 export const STACKING_CONDITIONS = ['doomed-x'];
-/** Untreated Major injuries kill you: "Days in excess of 10 minus the Injury Strain". */
-export const majorInfectionDays = (strain) => Math.max(0, 10 - (Number(strain) || 0));
+/** Untreated Major injuries kill you: "untreated, for Days in excess of 10" (PHB v19). */
+export const MAJOR_INFECTION_DAYS = 10;
 
 export const CORRUPTION_SCALE = [
   { key: 'clear', label: 'Clear', min: 0, max: 5, pool: 3 },
@@ -103,6 +107,7 @@ export const CORRUPTION_SCALE = [
   { key: 'terminal', label: 'Terminal', min: 18, max: Infinity, pool: 7 },
 ];
 export const AP_PER_TURN = 3;               // gain 3 AP at the start of your Turn (PHB b_Combat)
+export const INITIATIVE_DIE = '1d6';        // "roll 1d6 and add their Reflex" (PHB v19 b_Combat)
 // Panic Risk pool sizes by severity; reduced by your Mind bonus, minimum one.
 export const PANIC_POOL = { minor: 2, moderate: 3, major: 6 };
 // EXP economy (PHB a_Character Creation and Advancement)
@@ -140,28 +145,49 @@ export const HOUSE_INJURY_STEPS = [
 
 const ex = (value, formula, parts = []) => ({ value, formula, parts });
 
+// ---- shedding Strain (PHB v19 d_Rest, d_Activities) ---------------------
+/** Catching your Breath: one Minute, sheds all Strain — only if not over Reserve. */
+export const catchBreath = (strain, reserve) => (strain <= reserve ? 0 : strain);
+/** Rest by Watches: 1 → Tier, 2 → 2×Tier + Reserve, 3+ → all. */
+export function restShed(strain, watches, tier, reserve) {
+  if (watches >= 3) return 0;
+  const shed = watches === 2 ? 2 * tier + reserve : tier;
+  return Math.max(0, strain - shed);
+}
+/** Steady / Contemplate / Lay Back / Brood: after ten Minutes shed one Strain; if the
+ *  new total is at or below Reserve, shed all of it. */
+export function activityShed(strain, reserve) {
+  const next = Math.max(0, strain - 1);
+  return next <= reserve ? 0 : next;
+}
+
 // ---- primitives --------------------------------------------------------
 /** Ability Bonus = floor(Ability / 6): 6→+1, 12→+2, 18→+3 (PHB f_Ability Thresholds). */
 export function abilityBonus(adjusted) {
   return Math.max(0, Math.floor(adjusted / 6));
 }
 
-/** Adjusted Ability = Base + Bonus + Temp − Tax − strain penalty, floored at 0.
+/** Adjusted Ability = Base + Bonus + Temp − lowered − Tax − strain penalty, floored at 0.
  *  `temp` is a temporary spell/item swing kept separate from the real score.
- *  `tax`  is Taxing an Ability to auto-succeed a Test; cleared by Catching your Breath.
+ *  `lowers` are Ability losses that persist until healed: Injuries, a Day without Rest
+ *  (PHB v19), as [{ label, value }] with positive values.
+ *  `tax`  is Taxing an Ability to auto-succeed a Test; cleared by Resting (PHB v19).
  *  Strain only bites once it exceeds your Reserve (PHB a_Health), so `penalty` is that
  *  excess. The returned `parts` ALWAYS sum to `value`, including when the floor applies. */
-export function adjustedAbility(base, bonus, temp, penalty, tax = 0) {
-  const raw = base + bonus + temp - tax - penalty;
+export function adjustedAbility(base, bonus, temp, penalty, tax = 0, lowers = []) {
+  const lowered = lowers.reduce((s, l) => s + l.value, 0);
+  const raw = base + bonus + temp - lowered - tax - penalty;
   const value = Math.max(0, raw);
   const bits = ['Base'];
   if (bonus) bits.push('Bonus');
   if (temp) bits.push('Temp');
+  if (lowered) bits.push('− lowered');
   if (tax) bits.push('− Tax');
   const parts = [
     { label: 'Base', value: base },
     { label: 'Bonus', value: bonus },
     { label: 'Temp', value: temp },
+    ...lowers.map((l) => ({ label: l.label, value: -l.value })),
     { label: 'Tax', value: -tax },
     { label: 'strain', value: -penalty },
   ].filter((p) => p.label === 'Base' || p.value !== 0);
@@ -169,16 +195,16 @@ export function adjustedAbility(base, bonus, temp, penalty, tax = 0) {
   if (raw < 0) parts.push({ label: 'floor at 0', value: -raw });
   return ex(
     value,
-    bits.join(' + ').replace('+ − Tax', '− Tax') + (penalty ? ' − strain over Reserve' : '') + (raw < 0 ? ' (min 0)' : ''),
+    bits.join(' + ').replace(/\+ − /g, '− ') + (penalty ? ' − strain over Reserve' : '') + (raw < 0 ? ' (min 0)' : ''),
     parts,
   );
 }
 
-/** Reserve = Tier + your PERMANENT Body Bonus (not the strain-adjusted one, or strain
- *  would spiral). PHB a_Health: "Reserve=(Your Tier)+(Your Body Bonus)". */
+/** Reserve = Tier + your NATURAL Body Bonus — Injuries that lower Body count, Strain and
+ *  Taxation do not (or strain would spiral). PHB a_Health: "Reserve=(Your Tier)+(Your Body Bonus)". */
 export function reserve(tier, bodyBonus) {
-  return ex(tier + bodyBonus, 'Tier + permanent Body bonus',
-    [{ label: 'Tier', value: tier }, { label: 'permanent Body bonus', value: bodyBonus }]);
+  return ex(tier + bodyBonus, 'Tier + natural Body bonus',
+    [{ label: 'Tier', value: tier }, { label: 'natural Body bonus', value: bodyBonus }]);
 }
 export const panicPool = (base, mindBonus) => Math.max(1, base - mindBonus);
 /** Depravity = 1 + one per six Corruption — scales a Fixation's effects (PHB c_Panic). */

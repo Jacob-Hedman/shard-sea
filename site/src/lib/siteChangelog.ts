@@ -9,6 +9,16 @@ export interface SiteChange {
 
 export const siteChangelog: SiteChange[] = [
   {
+    date: '2026-10-26',
+    title: 'Character sheet: PHB v19 rules',
+    items: [
+      { tag: 'fix', text: 'Strain is one track. Catch breath (only when not over Reserve), Rest 1–4 Watches and Tax recovery follow v19: Tax now clears on Rest, not Catching your Breath. Old three-type Strain is added together into the single track.' },
+      { tag: 'feature', text: 'Second Wind replaces Wake and Overload: after being Incapacitated, shed all Strain and add the 1d6 Corruption. Buttons for the four new ten-minute Activities (Steady, Contemplate, Lay Back, Brood), and a Days-without-Rest counter that lowers Mind.' },
+      { tag: 'fix', text: 'Injuries no longer carry Permanent Strain. Each records its Damage, the Abilities it lowers (shown on the ability cards) and its Recovery Time (10 × Damage; Major ×3 after Surgery, with a treated box). Adding one can also add Strain equal to the Damage. Reserve uses your natural Body, so a Body injury lowers it.' },
+      { tag: 'fix', text: 'Initiative is shown as 1d6 + Reflex, with a copyable Foundry roll.' },
+    ],
+  },
+  {
     date: '2026-10-19',
     title: 'Codex 1.0: the D&D 3.5 Codex design, inverted',
     items: [

@@ -38,9 +38,11 @@ export function sanitize(input) {
     abilityStart: input.abilityStart
       ? { body: numOr(input.abilityStart.body), mind: numOr(input.abilityStart.mind), reflex: numOr(input.abilityStart.reflex) }
       : null,
+    // PHB v19: one Strain track. Pre-v19 three-type objects fold into the single number.
     strain: (input.strain && typeof input.strain === 'object')
-      ? { standard: Math.max(0, numOr(input.strain.standard)), persistent: Math.max(0, numOr(input.strain.persistent)), permanent: Math.max(0, numOr(input.strain.permanent)) }
-      : { standard: Math.max(0, numOr(input.strain)), persistent: 0, permanent: 0 },
+      ? Math.max(0, numOr(input.strain.standard) + numOr(input.strain.persistent) + numOr(input.strain.permanent))
+      : Math.max(0, numOr(input.strain)),
+    noRestDays: Math.max(0, numOr(input.noRestDays)),
     corruption: Math.max(0, numOr(input.corruption)),
     conditions: arr(input.conditions).slice(0, 40).map((k) => ({
       slug: k.slug ? str(k.slug, 60) : null,
@@ -54,7 +56,11 @@ export function sanitize(input) {
       id: safeId(i.id),
       name: str(i.name, 80) || 'Injury',
       severity: str(i.severity, 20) || 'Minor',
-      strain: Math.max(0, numOr(i.strain)),
+      // v19: the incurring Damage (sets Recovery Time) — pre-v19 docs called it `strain`
+      damage: Math.max(0, numOr(i.damage ?? i.strain)),
+      penalty: { body: Math.max(0, numOr(i.penalty?.body)), mind: Math.max(0, numOr(i.penalty?.mind)), reflex: Math.max(0, numOr(i.penalty?.reflex)) },
+      treated: !!i.treated,
+      recovery: i.recovery == null ? null : Math.max(0, numOr(i.recovery)),
       note: str(i.note, 200),
     })),
     expEarned: numOr(input.expEarned, 500),
@@ -106,7 +112,7 @@ export function sanitize(input) {
     visibility: 'shared',
     createdAt: input.createdAt || null,
     updatedAt: input.updatedAt || null,
-    schemaVersion: 2,
+    schemaVersion: 3,
   };
 }
 
