@@ -1,6 +1,6 @@
 // Character builder. Edits a character document, autosaves to the KV API, and
 // pulls all choices (skills, disciplines, feats, equipment) from the codex.
-import { api, esc } from './charApi';
+import { api, esc, isConflict } from './charApi';
 import { derive } from '../lib/character/derive.mjs';
 import { SKILLS, MAX_SKILLS, PRINCIPAL_SKILLS, parseBulk } from '../lib/character/rules.mjs';
 
@@ -49,7 +49,31 @@ function markDirty() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(save, 700);
 }
+// Set when a save was refused because the sheet changed elsewhere since it was opened
+// (another device, or the play sheet in another tab): autosave stops until the player chooses.
+let conflicted = false;
+function showConflict() {
+  conflicted = true;
+  setSaveState('dirty');
+  if (document.getElementById('cs-conflict')) return;
+  const bar = document.createElement('div');
+  bar.id = 'cs-conflict';
+  bar.className = 'cs-conflict';
+  bar.setAttribute('role', 'alert');
+  bar.innerHTML = `<b>This character was changed elsewhere</b> since you opened it, so your latest change was not saved.
+    <span class="cs-conflict-acts"><button type="button" class="cs-btn" data-conflict="reload">Reload the latest</button>
+    <button type="button" class="cs-btn" data-conflict="mine">Keep mine (overwrite)</button></span>`;
+  bar.addEventListener('click', async (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-conflict]')?.dataset.conflict;
+    if (act === 'reload') location.reload();
+    if (act === 'mine' && id) {
+      try { await api.update(id, char, true); conflicted = false; bar.remove(); setSaveState('saved'); } catch { /* stays shown */ }
+    }
+  });
+  mount.before(bar);
+}
 async function save() {
+  if (conflicted) return;
   setSaveState('saving');
   try {
     if (!id) {
@@ -60,12 +84,16 @@ async function save() {
       await api.update(id, char);
     }
     setSaveState('saved');
-  } catch { setSaveState('dirty'); }
+  } catch (e) {
+    if (isConflict(e)) return showConflict();
+    setSaveState('dirty');
+  }
 }
 
 // ---- render ----
 export async function initBuilder(el: HTMLElement) {
   mount = el;
+  conflicted = false;
   id = new URLSearchParams(location.search).get('c');
   if (id) {
     char = await api.get(id);

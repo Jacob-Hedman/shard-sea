@@ -145,6 +145,14 @@ export function derive(raw) {
   const carried = c.items.filter((i) => !i.stowed).reduce((s, i) => s + itemBulk(i), 0);
   const carriedRounded = Math.round(carried * 100) / 100;
   const stowed = Math.round(c.items.filter((i) => i.stowed).reduce((s, i) => s + itemBulk(i), 0) * 100) / 100;
+  // What the character's Imaginary Pockets can hold: 50T Bulk each (PHB Artifice), T being the
+  // Pocket's own Tier (its Tier, else a "T2" in its note, else the character's).
+  const pockets = c.items.filter((i) => i.refSlug === 'imaginary-pocket' || /imaginary pocket/i.test(i.name || ''));
+  const pocketCap = pockets.reduce((s, i) => {
+    const t = num(i.tier) || Number((/\bT(\d)\b/.exec(i.note || '') || [])[1]) || num(c.tier) || 1;
+    return s + 50 * t * Math.max(1, num(i.qty) || 1);
+  }, 0);
+  const pocket = pockets.length ? { cap: pocketCap, n: pockets.length, over: stowed > pocketCap } : null;
   const penalty = Math.max(0, Math.ceil(carriedRounded - maxEncVal));
 
   // --- derived vitals ---
@@ -304,7 +312,7 @@ export function derive(raw) {
     ability, movement, speeds, initiative, ap, reserve,
     strain, strainPenalty, injuries, incapacitated, noRestDays: c.noRestDays,
     conditions: c.conditions,
-    maxEnc, carried: carriedRounded, stowed, penalty, push, lift, panic,
+    maxEnc, carried: carriedRounded, stowed, pocket, penalty, push, lift, panic,
     houseDt, houseSt, houseShakes,
     corruption,
     skills, defenses, disciplines, byKind, exp, warnings,
