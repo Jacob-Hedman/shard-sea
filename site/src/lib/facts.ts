@@ -30,15 +30,29 @@ export const GENERIC_SKIP = new Set([
   'custom', 'made_on', 'status', 'origin', 'outdated', 'Made On',
 ]);
 export const SHORT = 30;
+// A Structure's resource yield, written two ways in the book: "Resources_F:0/G:6" (which the
+// attribute parser splits at its first colon into key "Resources_F", value "0/G:6") and
+// "Resources-F: 1| G: -". Both become one fact, "F 0 · G 6".
+const RESOURCE_KEYS = new Set(['Resources_F', 'Resources-F', 'G']);
+function resources(attrs: Record<string, any>): string {
+  let f = attrs['Resources-F'], g = attrs.G;
+  const joined = /^([^/]*)\/G:(.*)$/.exec(String(attrs.Resources_F ?? ''));
+  if (joined) [f, g] = [joined[1], joined[2]];
+  const show = (v: any) => (v == null || /^\s*-?\s*$/.test(String(v)) ? '–' : String(v).trim());
+  return f == null && g == null ? '' : `F ${show(f)} · G ${show(g)}`;
+}
+
 function genericRows(rec: any): [string, any][] {
   const attrs = rec.attrs ?? {};
   return [
+    ['Resources', resources(attrs)],
     ['Class', rec.rune_class],
     ['Multiplier', rec.multiplier],
     ['Applies to', rec.applies_to],
     ['Skill', rec.kind === 'activity' ? rec.group : ''],
     ...Object.entries(attrs)
       .filter(([k, v]) => !GENERIC_SKIP.has(k) && !['Class', 'Multipier', 'Multiplier', 'applies_to'].includes(k) && v && typeof v !== 'object' && String(v).length <= SHORT)
+      .filter(([k]) => !RESOURCE_KEYS.has(k))
       .map(([k, v]) => [k.replace(/_/g, ' '), v] as [string, any]),
   ];
 }

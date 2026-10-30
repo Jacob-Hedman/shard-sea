@@ -1,18 +1,20 @@
 ---
+import { withoutLead } from '../../lib/format';
 import Prose from '../Prose.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
+const special = withoutLead(rec.special, rec.summary);
 const LABEL = 'subh';
 ---
 
 <div class="file-main">
   <div class="min-w-0 space-y-5">
     {rec.summary && <p class="text-[15px] leading-relaxed text-muted">{rec.summary}</p>}
-    {rec.special && (
+    {special && (
       <section>
         <h2 class={LABEL}>Special</h2>
-        <Prose text={rec.special} />
+        <Prose text={special} />
       </section>
     )}
   </div>

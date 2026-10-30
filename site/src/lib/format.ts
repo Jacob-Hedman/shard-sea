@@ -163,3 +163,15 @@ export function tidyValue(v: unknown): string {
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
+
+// A section's text minus the lead paragraph already shown above it: the importer builds a
+// weapon's or armor's "special" as its description plus its effects, so the description
+// would otherwise print twice. Returns '' when nothing is left.
+export function withoutLead(text: unknown, lead: unknown): string {
+  const t = String(text ?? '').trim();
+  const l = String(lead ?? '').trim();
+  if (!l) return t;
+  const sq = (s: string) => s.replace(/\s+/g, ' ');
+  if (sq(t) === sq(l)) return '';
+  return t.startsWith(l) ? t.slice(l.length).trim() : t;
+}

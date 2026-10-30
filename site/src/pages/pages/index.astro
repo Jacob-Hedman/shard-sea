@@ -1,0 +1,57 @@
+---
+// The book: every chapter of the PHB (and the appendix) in reading order, each linking to its
+// page. The prose sections (Making Characters, Survival…) show a slice of this; here is all of it.
+import Layout from '../../components/Layout.astro';
+import { SECTIONS, GROUP_COLOR } from '../../lib/sections';
+import { loadFull, loadMeta } from '../../lib/data';
+
+const meta = loadMeta();
+const pages = (loadFull('page') as any[])
+  .slice()
+  .sort((a, b) => (a.chapter_no || 99) - (b.chapter_no || 99) || (a.section_order || 99) - (b.section_order || 99));
+const chapters: { name: string; pages: any[] }[] = [];
+for (const p of pages) {
+  const name = p.chapter || 'Appendix';
+  const last = chapters[chapters.length - 1];
+  if (last && last.name === name) last.pages.push(p);
+  else chapters.push({ name, pages: [p] });
+}
+const sectionOf = (p: any) => SECTIONS.find((s) => s.type === 'pages' && s.pageKey === p.section);
+---
+
+<Layout title="The Book" description={`Every chapter of the Kriegsmesser PHB ${meta.version}, in reading order.`}>
+  <section class="ledger-hd pad">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Codex</a><span aria-hidden="true">/</span><span aria-current="page">The Book</span></nav>
+    <div class="ledger-title">
+      <span class="code">··</span>
+      <h1 class="board" data-t="The Book">The Book</h1>
+      <span class="lbl">{pages.length} chapters · PHB {meta.version}</span>
+    </div>
+    <p class="blurb">Every chapter of the PHB, in reading order. The listings hold the entries; these pages hold the rules around them.</p>
+  </section>
+  <div class="rbody">
+    <table class="ledger">
+      <caption class="sr-only">The chapters of the PHB</caption>
+      <thead><tr><th scope="col">Chapter</th><th scope="col" class="hide-sm">Summary</th><th scope="col" class="hide-md">Section</th></tr></thead>
+      <tbody>
+        {
+          chapters.map((c) => (
+            <Fragment>
+              <tr class="grp-row"><td colspan="3">{c.name}</td></tr>
+              {c.pages.map((p, i) => {
+                const sec = sectionOf(p);
+                return (
+                  <tr>
+                    <td class="nm"><span class="n">{String(i + 1).padStart(2, '0')}</span><a href={`/pages/${p.slug}`}>{p.name}</a></td>
+                    <td class="ds hide-sm">{p.summary ? (p.summary.length > 180 ? p.summary.slice(0, 179).trimEnd() + '…' : p.summary) : <span class="none">—</span>}</td>
+                    <td class="src hide-md">{sec ? <a class="lnk" style={`--c:${GROUP_COLOR[sec.group]}`} href={`/${sec.route}`}>{sec.label}</a> : ''}</td>
+                  </tr>
+                );
+              })}
+            </Fragment>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+</Layout>

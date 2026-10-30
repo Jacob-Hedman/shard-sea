@@ -38,6 +38,7 @@ const inDrawer = DRAWERS.some((s) => isIn(s.route));
 const groups = sectionsByGroup();
 const short = (l: string) => l.replace(' & Shields', '').replace(' Items', '').replace('Damage & ', '');
 const EXTRA = [
+  { href: '/pages', label: 'The Book' },
   { href: '/characters', label: 'Characters' },
   { href: '/compare', label: 'Compare' },
   { href: '/changelog', label: 'Changelog' },

@@ -74,7 +74,9 @@ const indexCols: (typeof groups)[] = [[], []];
 
 // ---------------------------------------------------------------- the matrix: rows × Tier
 // (the D&D codex's spell matrix, for Kriegsmesser): feats by Skill, or equipment by kind.
-const TIERS = [1, 2, 3];
+// Tiers run as high as the data does (v19 feats reach Tier 6).
+const maxTierOf = (kinds: string[]) => Math.max(3, ...kinds.flatMap((k) => (loadIndex(k) as any[]).map((r) => (typeof r.tier === 'number' ? r.tier : 0))));
+const TIERS = Array.from({ length: maxTierOf(['feat', 'weapon', 'armor', 'magic_item', 'martech', 'consumable', 'artifice', 'ship']) }, (_, i) => i + 1);
 const feats = loadIndex('feat');
 const featRows = SKILLS.map((s: any) => s.name);
 const EQUIP = ['weapon', 'armor', 'magic_item', 'martech', 'consumable', 'artifice', 'ship'].filter((k) => sectionByKind(k));
@@ -227,6 +229,7 @@ const iconic = PICKS.map((k) => {
                   <Fragment>
                     <tr class="grp"><td colspan="3">Tools</td></tr>
                     <tr><td class="code">··</td><td class="nm"><a href="/characters">Characters</a><small>builder &amp; sheets</small></td><td class="qf"><a href="/compare">Compare</a><a href="/changelog">Changelog</a><a href="/about">About</a></td></tr>
+                    <tr><td class="code">··</td><td class="nm"><a href="/pages">The Book</a><small>every chapter</small></td><td class="qf"><a href="/character">Making Characters</a><a href="/survival">Survival</a><a href="/play">Playing the Game</a></td></tr>
                   </Fragment>
                 )}
               </tbody>

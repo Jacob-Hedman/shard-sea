@@ -133,17 +133,25 @@ const abilityOfSkill = (skill) => SKILL_ABILITY[String(skill ?? '').toLowerCase(
 
 // Themes: read from the entry's own words (damage types and the setting's recurring forces).
 const THEME_WORDS = [
-  ['Fire', /\b(incendiary|fire|flame|burn)/i], ['Cold', /\b(frost|cold|ice|freez)/i],
-  ['Electricity', /\b(voltaic|lightning|spark)/i], ['Poison', /\b(poison|venom|toxin)/i],
-  ['Good', /\bholy\b/i], ['Evil', /\bunholy\b|\bdemon/i], ['Chaotic', /\bchaos\b/i], ['Lawful', /\border\b(?! to)/i],
-  ['Shadow', /\b(shadow|darkness)\b/i], ['Light', /\blight\b(?! armor| weapon)/i], ['Healing', /\b(heal|mend|recover)/i],
-  ['Fear', /\b(panic|fear)\b/i], ['Mind', /\b(corruption|fixation|sanity)\b/i], ['Water', /\b(water|sea|swim)/i],
-  ['Air', /\b(wind|air|sky|fly)/i], ['Earth', /\b(earth|stone)\b/i], ['Force', /\bforce\b/i],
-  ['Stealth', /\b(hidden|stealth|unseen|invisible)/i], ['Mobility', /\b(movement|leap|climb)\b/i], ['Defense', /\b(armor rating|negate|block)\b/i],
+  ['Fire', /\b(incendiary|fire|flames?|burn(s|ing)?)\b/i], ['Cold', /\b(frost|freez\w*|ice)\b/i],
+  ['Electricity', /\b(voltaic|lightning)\b/i], ['Poison', /\b(poison\w*|venom\w*|toxins?)\b/i],
+  ['Good', /\bholy\b/i], ['Evil', /\bunholy\b/i], ['Chaotic', /\bchaos damage\b/i],
+  ['Healing', /\b(heal\w*|mend\w*)\b/i], ['Fear', /\b(panic\w*|fear\w*)\b/i],
+  ['Shadow', /\bdarkness\b/i], ['Light', /\blight\b(?! (armou?r|weapons?|bulk|load|sleep|wounds?))/i],
 ];
 const textOf = (rec) => [rec.effect, rec.effects, rec.summary, rec.text, rec.description, rec.special, rec.passive].filter((x) => typeof x === 'string').join(' ');
 
 // ------------------------------------------------------------ reading a full record into a compact sigil row
+const maxTiers = new Map();
+/** The highest Tier any entry of a section reaches (build time). */
+function maxTier(kind) {
+  if (!maxTiers.has(kind)) {
+    let m = NaN;
+    try { for (const rec of loadFull(kind)) { const t = tierOf(rec); if (isFinite(t) && !(m >= t)) m = t; } } catch { /* no such section */ }
+    maxTiers.set(kind, m);
+  }
+  return maxTiers.get(kind);
+}
 const tierOf = (rec) => { const t = num(rec.tier ?? rec.feat_tier); return isFinite(t) ? t : NaN; };
 export function sigilRow(rec) {
   const fc = rec.facets ?? {};
@@ -173,11 +181,14 @@ export function spec(r) {
   const s = { kind: r.k, fams: families(r), themes: themes(r), reading: [] };
   const add = (zone, label) => s.reading.push({ zone, label });
   const copies = (d, n) => { s.cores = [d]; s.count = Math.max(1, Math.min(4, n || 1)); s.countMode = 'copies'; };
-  const tiered = (d, label) => {
-    copies(d, isFinite(r.t) ? r.t : 1); add('core', label);
-    add('count', isFinite(r.t) ? `Tier ${r.t} — ${r.t} outline${r.t > 1 ? 's' : ''}` : 'No Tier — 1 outline');
+  // Tier is counted in rings around the core, as the D&D codex counts spell levels.
+  const ringsForTier = () => {
+    s.countMode = 'rings'; s.coreScale = 0.55;
+    s.count = isFinite(r.t) ? Math.max(0, Math.min(9, r.t)) : 0;
+    add('count', isFinite(r.t) ? `Tier ${r.t} — ${r.t} ring${r.t === 1 ? '' : 's'}` : 'No Tier — no rings');
     if (isFinite(r.t)) s.corner = `T${r.t}`;
   };
+  const tiered = (d, label) => { s.cores = [d]; add('core', label); ringsForTier(); };
   const ability = (ab) => {
     s.saves = { F: ab.includes('body'), R: ab.includes('mind'), W: ab.includes('reflex') };
     s.saveLabels = { F: 'BODY', R: 'MIND', W: 'REFLEX' };
@@ -200,9 +211,7 @@ export function spec(r) {
     add('count', `${r.feats} feat${r.feats === 1 ? '' : 's'} — ${s.count} outline${s.count > 1 ? 's' : ''}`);
     if (r.special) { s.inner = { t: 'glyph', d: star(4, 1, 0.3) }; add('inner', 'A special Discipline — star'); }
   } else if (k === 'feat') {
-    byAbility('Feat of a Skill'); s.count = isFinite(r.t) ? Math.max(1, Math.min(4, r.t)) : 1; s.countMode = 'copies'; s.code = 'FEA';
-    add('count', isFinite(r.t) ? `Tier ${r.t} — ${s.count} outline${s.count > 1 ? 's' : ''}` : 'No Tier — 1 outline');
-    if (isFinite(r.t)) s.corner = `T${r.t}`;
+    byAbility('Feat of a Skill'); ringsForTier(); s.code = 'FEA';
     if (isFinite(r.ap) && r.ap > 0) { s.inner = { t: 'rays', n: Math.min(8, r.ap) }; add('inner', `${r.ap} AP — ${Math.min(8, r.ap)} ray${r.ap > 1 ? 's' : ''}`); }
     else add('inner', 'No AP cost — empty centre');
   } else if (k === 'threshold_feat') {
@@ -247,7 +256,9 @@ export function spec(r) {
   else if (k === 'structure') { tiered(BUILDING, r.cat || 'Structure'); s.code = 'STR'; }
   else { copies(DOC, 1); add('core', 'Rules chapter — the page'); s.code = 'PAG'; }
   add('themes', s.themes.length ? 'Themes: ' + s.themes.join(', ') : 'No theme marks');
-  if (isFinite(r.t) && r.t >= 3 && !['action'].includes(k)) { s.power = 'mighty'; add('power', 'Tier 3 — corona of rays around the core'); }
+  // the corona marks the top Tier of its own section (Tier 3 weapons, Tier 6 feats…)
+  const top = maxTier(k);
+  if (isFinite(r.t) && top >= 2 && r.t === top && k !== 'action') { s.power = 'mighty'; add('power', `Tier ${r.t}, the highest of its section — corona of rays around the core`); }
   return s;
 }
 // ------------------------------------------------------------ drawing
