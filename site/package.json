@@ -11,7 +11,8 @@
     "export": "node --no-warnings scripts/export-data.mjs",
     "auth:dev": "wrangler pages dev",
     "deploy": "astro build && wrangler pages deploy",
-    "astro": "astro"
+    "astro": "astro",
+    "test:search": "node scripts/search-selftest.mjs"
   },
   "dependencies": {
     "@fontsource-variable/schibsted-grotesk": "^5.3.0",

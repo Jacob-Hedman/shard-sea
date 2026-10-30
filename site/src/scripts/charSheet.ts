@@ -3,7 +3,7 @@
 // track), conditions, injuries, armor notches, corruption, taxed and temporary
 // ability points, money and character art are all changed here and autosaved.
 // Click any skill, ability, discipline or weapon to build a copy-paste Foundry roll.
-import { api, esc, openRoll } from './charApi';
+import { api, esc, openRoll, isConflict } from './charApi';
 import { derive } from '../lib/character/derive.mjs';
 import {
   DAMAGE_TYPES, BASE_DAMAGE, INJURY_SEVERITIES, CONDITION_COUNTERS,
@@ -88,15 +88,41 @@ function markDirty() {
 }
 let saveRetries = 0;
 const MAX_SAVE_RETRIES = 5;
-async function save() {
-  if (!cid) return;
+// Set when a save was refused because the sheet changed elsewhere: autosave stops until the
+// player picks Reload or Keep mine, so neither version is lost silently.
+let conflicted = false;
+function showConflict() {
+  conflicted = true;
+  setSaveState('dirty');
+  const txt = document.querySelector('#cs-save .txt');
+  if (txt) txt.textContent = 'Changed elsewhere';
+  if (document.getElementById('cs-conflict')) return;
+  const bar = document.createElement('div');
+  bar.id = 'cs-conflict';
+  bar.className = 'cs-conflict';
+  bar.setAttribute('role', 'alert');
+  bar.innerHTML = `<b>This sheet was changed elsewhere</b> (another device or tab) since you opened it, so your latest change was not saved.
+    <span class="cs-conflict-acts"><button type="button" class="cs-btn" data-conflict="reload">Reload the latest</button>
+    <button type="button" class="cs-btn" data-conflict="mine">Keep mine (overwrite)</button></span>`;
+  bar.addEventListener('click', async (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-conflict]')?.dataset.conflict;
+    if (act === 'reload') location.reload();
+    if (act === 'mine' && cid) {
+      try { await api.update(cid, char, true); conflicted = false; bar.remove(); setSaveState('saved'); } catch { /* stays shown */ }
+    }
+  });
+  mount.before(bar);
+}
+async function save(keepalive = false) {
+  if (!cid || conflicted) return;
   clearTimeout(saveTimer); saveTimer = null;
   setSaveState('saving');
   try {
-    await api.update(cid, char);
+    await api.update(cid, char, false, keepalive);
     saveRetries = 0;
     setSaveState('saved');
-  } catch {
+  } catch (e) {
+    if (isConflict(e)) return showConflict();
     setSaveState('dirty');
     // Retry a bounded number of times with backoff, then stop and stay visibly
     // "Unsaved" rather than hammering an endpoint that is never going to accept us.
@@ -106,14 +132,11 @@ async function save() {
     }
   }
 }
-/** Persist immediately — used when the page is about to go away. */
+/** Persist immediately — used when the page is going away (or hidden). A keepalive PUT, so it
+ *  can outlive the page and still carries the version check. */
 function flush() {
-  if (!cid || !saveTimer) return;
-  clearTimeout(saveTimer); saveTimer = null;
-  try {
-    navigator.sendBeacon?.(`/api/characters/${cid}`, new Blob([JSON.stringify(char)], { type: 'application/json' }));
-  } catch { /* falls through to the normal save below */ }
-  void save();
+  if (!cid || !saveTimer || conflicted) return;
+  void save(true);
 }
 
 function ensureShape(c: any) {
@@ -172,7 +195,8 @@ function healItems(c: any) {
     fill('movement_penalty', st.movement_penalty); fill('durability', st.durability || st.durable);
     fill('traits', st.traits); fill('activation', st.activation); fill('pattern', st.pattern);
     fill('effects', st.effects || st.special);
-    if (!it.accuracy && st.accuracy) { it.accuracy = Number(String(st.accuracy).replace(/[^\d.-]/g, '')) || 0; healed++; }
+    const acc = Number(String(st.accuracy ?? '').replace(/[^\d.-]/g, '')) || 0;
+    if (!it.accuracy && acc) { it.accuracy = acc; healed++; }
     if (it.tier == null && rec.tier != null) { it.tier = rec.tier; healed++; }
     // codex Bulk is often a formula of Tier/Height — recompute when we never stored it
     if (!it.bulkFormula) {
@@ -186,10 +210,14 @@ function healItems(c: any) {
 // ========================================================================
 export async function mountSheet(el: HTMLElement, character: any, id?: string) {
   clearTimeout(saveTimer); saveTimer = null;     // never let a stale timer fire at the new character
-  mount = el; char = character; cid = id || null; saveState = 'saved';
+  mount = el; char = character; cid = id || null; saveState = 'saved'; conflicted = false;
+  document.getElementById('cs-conflict')?.remove();
   ensureShape(char);
   await loadRef();
-  if (healItems(char)) markDirty();     // persist the repair so the builder agrees
+  // Persist a repair so the builder agrees, but only a real one: merely opening a sheet must not
+  // write it (an Accuracy of "0" used to count as a repair and re-saved the sheet on every view).
+  const before = JSON.stringify(char.items);
+  if (healItems(char) && JSON.stringify(char.items) !== before) markDirty();
   render();
   bindLifecycle();
 }
@@ -497,7 +525,8 @@ function vitalsHtml(d: any) {
     <div class="cs-vital card"><div class="cs-lbl">Encumbrance</div>
       <div class="v cs-num">${d.maxEnc.value} <small class="cs-num">· ${d.carried} carried${d.stowed ? ` · ${d.stowed} stowed` : ''}</small></div>${fLine(d.maxEnc)}
       <div class="cs-bar ${d.penalty ? 'over' : ''}"><span style="width:${encPct}%"></span></div>
-      <div class="cs-f">push ${d.push.value} · lift ${d.lift.value}${d.penalty ? ` · <b class="bad">over by ${d.penalty}</b>` : ''}</div></div>
+      <div class="cs-f">push ${d.push.value} · lift ${d.lift.value}${d.penalty ? ` · <b class="bad">over by ${d.penalty}</b>` : ''}</div>
+      ${d.pocket && d.stowed ? `<div class="cs-f${d.pocket.over ? ' bad' : ''}">${d.pocket.n > 1 ? 'Imaginary Pockets hold' : 'Imaginary Pocket holds'} ${d.pocket.cap} (50 × T) · ${d.pocket.over ? `<b class="bad">${Math.round((d.stowed - d.pocket.cap) * 100) / 100} stowed over</b>` : 'stowed fits'}</div>` : ''}</div>
     <div class="cs-vital card"><div class="cs-lbl">Weight</div>
       <div class="v cs-num">${d.weight.value}</div>${fLine(d.weight)}
       <div class="cs-f">${esc(d.size)} — armor Bulk counts toward Weight</div></div>

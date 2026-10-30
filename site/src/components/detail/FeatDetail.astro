@@ -39,8 +39,8 @@ const subEffects = Object.entries(rec.attrs ?? {}).filter(
 </div>
 <aside class="file-side">
       {rec.discipline_slug && (
-        <a href={hrefFor('discipline', rec.discipline_slug)} class="inline-flex items-center gap-1.5 text-sm text-gold hover:underline">
-          <Icon name="arrow-left" class="text-sm" />All of {rec.discipline_name}
+        <a href={hrefFor('discipline', rec.discipline_slug)} class="side-link">
+          <Icon name="arrow-left" /> All of {rec.discipline_name}
         </a>
       )}
       {traits.length > 0 && (

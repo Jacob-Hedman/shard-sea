@@ -1390,3 +1390,11 @@
 .tier-n { display: inline-block; margin-right: 8px; padding: 0 5px; background: #fff; color: #000; font: 600 11px var(--font-mono); }
 .pg-h { margin: 8px 0 6px; font: 900 clamp(40px, 6vw, 88px)/.88 var(--font-sans) !important; text-transform: uppercase; letter-spacing: -.03em !important; }
 .file-hd h1.long { font-size: clamp(36px, 4.6vw, 72px); line-height: .9; }
+.phb-img { margin: 18px 0; border: 3px solid #fff; box-shadow: 8px 8px 0 var(--color-red); max-width: 720px; }
+.phb-img img { display: block; width: 100%; height: auto; }
+.ledger tr.grp-row td { padding: 22px 0 8px; font: 900 22px/1 var(--font-sans); text-transform: uppercase; letter-spacing: -.01em; border-bottom: 3px solid #fff; }
+/* a save refused because the sheet changed elsewhere */
+.cs-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; padding: 10px 14px; background: var(--color-sodium); color: #000; border: 2px solid #fff; font-size: 14px; }
+.cs-conflict .cs-btn { background: #000; color: #fff; border: 2px solid #000; }
+.cs-conflict .cs-btn:hover { background: #fff; color: #000; }
+.cs-conflict-acts { display: inline-flex; gap: 8px; margin-left: auto; }

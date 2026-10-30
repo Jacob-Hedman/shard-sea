@@ -5,15 +5,23 @@ import { foundryRoll, DIFFICULTY_LADDER, DEFAULT_DC, resistDC } from '../lib/cha
  *  returns a JSON body, so without this a failed save looks like a successful one. */
 const j = async (r: Response) => {
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error((body && body.error) || `HTTP ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error((body && body.error) || `HTTP ${r.status}`), { status: r.status, body });
   return body;
 };
+/** A save refused because the sheet was changed elsewhere since it was loaded (HTTP 409). */
+export const isConflict = (e: unknown) => (e as { status?: number })?.status === 409;
 export const api = {
   list: () => fetch('/api/characters').then(j),
   get: (id: string) => fetch(`/api/characters/${id}`).then(j),
   create: (c: any) => fetch('/api/characters', { method: 'POST', body: JSON.stringify(c) }).then(j),
-  update: (id: string, c: any) =>
-    fetch(`/api/characters/${id}`, { method: 'PUT', body: JSON.stringify(c) }).then(j),
+  /** Saves `c`. Unless `force`, the server refuses it (409) when the stored sheet is newer than
+   *  the version `c` was loaded at (c.updatedAt). On success c.updatedAt moves to the new version.
+   *  `keepalive` lets the request finish while the page is going away. */
+  update: async (id: string, c: any, force = false, keepalive = false) => {
+    const res = await fetch(`/api/characters/${id}`, { method: 'PUT', keepalive, body: JSON.stringify(force ? c : { ...c, baseUpdatedAt: c.updatedAt }) }).then(j);
+    if (res?.updatedAt) c.updatedAt = res.updatedAt;
+    return res;
+  },
   del: (id: string) => fetch(`/api/characters/${id}`, { method: 'DELETE' }).then(j),
 };
 

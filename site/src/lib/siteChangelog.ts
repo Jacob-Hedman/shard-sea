@@ -9,6 +9,19 @@ export interface SiteChange {
 
 export const siteChangelog: SiteChange[] = [
   {
+    date: '2026-10-30',
+    title: 'Review pass: search, sigils, the Book, safer sheets',
+    items: [
+      { tag: 'fix', text: 'Search understands Shard-sea phrases: "vitality feats", "t3 armour", "ranged weapons", "magic items", "spirits". A bare section word offers to open that section.' },
+      { tag: 'fix', text: 'Sigils draw Tier as rings up to Tier 6, and the corona marks only the highest Tier of a section. Theme marks are limited to clear damage and effect words. The home matrix spans every Tier in use.' },
+      { tag: 'feature', text: 'The Book (/pages) lists every chapter in reading order. Chapters are filed under their own section, and the vault images (Shard interior, the Sea) now show on their pages instead of raw embed text.' },
+      { tag: 'fix', text: 'Repeated text removed: weapon and armor Special no longer restates the summary, and structures show Resources as one fact.' },
+      { tag: 'fix', text: 'Opening a character sheet no longer saves it. A sheet or build changed elsewhere since you opened it is no longer silently overwritten: you choose Reload or Keep mine.' },
+      { tag: 'feature', text: 'The Encumbrance card shows the Imaginary Pocket capacity (50 × T Bulk) and how far stowed items are over or under it.' },
+      { tag: 'fix', text: 'The sign-in page uses the codex design. About now explains search, sigils, compare and custom content.' },
+    ],
+  },
+  {
     date: '2026-10-26',
     title: 'Character sheet: PHB v19 rules',
     items: [

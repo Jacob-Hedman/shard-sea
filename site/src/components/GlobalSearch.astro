@@ -1,7 +1,7 @@
 ---
 import Icon from './Icon.astro';
-import { routeMap, labelMap, SECTIONS } from '../lib/sections';
-import { loadMeta, countFor } from '../lib/data';
+import { routeMap, labelMap, SECTIONS, isRecords, allFacets } from '../lib/sections';
+import { loadMeta, countFor, loadIndex } from '../lib/data';
 import { jsonForScript } from '../lib/format';
 
 // Section launcher rows (label + entry count) for the empty palette — resolved at
@@ -13,7 +13,24 @@ const sectionRows = SECTIONS.filter((s) => !s.hidden).map((s) => ({
   count: countFor(meta, s.kind),
 }));
 const pluralMap = Object.fromEntries(SECTIONS.map((s) => [s.kind, s.label]));
-const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows });
+// The phrase parser's vocabulary: the words that name each listing ("feats", "magic items",
+// "armour"…) and the values of its filters ("Vitality", "Tier 2", "Ranged"), so a phrase like
+// "vitality feats tier 2" opens as Feats filtered by Skill and Tier.
+const listed = SECTIONS.filter((s) => isRecords(s) && !s.hidden);
+const kindWords: Record<string, string> = {};
+for (const s of listed) {
+  for (const w of [s.label, s.singular, s.route.replace(/-/g, ' '), s.label.replace(/ & .*/, '')]) kindWords[w.toLowerCase()] = s.kind;
+}
+Object.assign(kindWords, { armour: 'armor', shields: 'armor', shield: 'armor', items: 'magic_item', mods: 'martech', mod: 'martech' });
+const facetValues = Object.fromEntries(
+  listed.map((s) => {
+    const fields = allFacets(s).map((f) => f.field);
+    const by: Record<string, Set<string>> = {};
+    for (const r of loadIndex(s.kind) as any[]) for (const f of fields) for (const v of r.facets?.[f] ?? []) (by[f] ??= new Set()).add(v);
+    return [s.kind, Object.fromEntries(Object.entries(by).map(([f, v]) => [f, [...v]]))];
+  }),
+);
+const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows, kindWords, facets: facetValues });
 ---
 
 <div id="search-overlay" transition:persist="search-overlay" role="dialog" aria-modal="true" aria-label="Search the Codex" class="gs hidden" aria-hidden="true">
@@ -67,7 +84,8 @@ const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows });
     if (!overlay || !input || !results || !hint) return;
 
     let index: NameIndex | null = null;
-    let facets: Parameters<typeof parseQuery>[1] = null;
+    const facets: Parameters<typeof parseQuery>[1] = cfg.facets || null;
+    const kindWords: Record<string, string> = cfg.kindWords || {};
     let loading = false;
     let sel = -1;
     let token = 0; // bumps on every render, so a slow section load can't paint over newer results
@@ -79,14 +97,7 @@ const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows });
       if (index || loading) return;
       loading = true;
       try {
-        const [entries, f] = await Promise.all([
-          fetch('/data/search.json').then((r) => r.json()),
-          fetch('/data/search-facets.json')
-            .then((r) => (r.ok ? r.json() : null))
-            .catch(() => null),
-        ]);
-        index = new NameIndex(entries);
-        facets = f;
+        index = new NameIndex(await fetch('/data/search.json').then((r) => r.json()));
       } catch {
         index = new NameIndex([]);
       }
@@ -206,8 +217,8 @@ const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows });
       };
       if (p.kindAt) chip(kindLabel, p.kindAt[0], p.kindAt[1]);
       else chips.append(el('span', 'gs-chip is-fixed', kindLabel));
-      // facets only filter spells and powers; elsewhere the words search the text
-      const faceted = (kind === 'spell' || kind === 'power') && p.cues.length > 0;
+      // words that name a filter of the section filter it; the rest search its text
+      const faceted = p.cues.length > 0;
       const text = faceted ? p.rest : [...p.cues.map((c) => c.label), p.rest].filter(Boolean).join(' ');
       if (faceted) for (const c of p.cues) chip(c.label, c.from, c.to);
       if (text) chips.append(el('span', 'gs-chip is-text', `“${text}”`));
@@ -270,16 +281,24 @@ const gsConfig = jsonForScript({ routeMap, labelMap, pluralMap, sectionRows });
       }
       const excluded = excludedTypes();
       const skip = (e: Entry) => !!e.c && excluded.has(e.c);
-      const p = parseQuery(q, facets);
+      const p = parseQuery(q, facets, kindWords);
       if (p.structured && p.kind) {
         void renderStructured(p, my, skip);
         return;
+      }
+      // A bare section word ("feats", "spirits"): offer the section first, then any names.
+      if (p.kind && !p.rest && !p.cues.length) {
+        const go = el('a', 'gs-row gs-all') as HTMLAnchorElement;
+        go.href = `/${routeMap[p.kind] || p.kind}`;
+        go.append(el('span', 'gs-k', '→'), el('div', 'gs-main gs-n', `Open ${pluralMap[p.kind] || p.kind}`));
+        results!.append(go);
       }
       let hits = index.search(q, { skip });
       // "fireball wizard": the filter words match no name, so try the rest alone
       if (!hits.length && p.cues.length && p.rest) hits = index.search(p.rest, { skip });
       const n = renderHits(hits);
       if (n) hint!.textContent = `${n} match${n === 1 ? '' : 'es'}`;
+      else if (p.kind && !p.rest && !p.cues.length) hint!.textContent = pluralMap[p.kind] || p.kind;
       else {
         const sug = index.suggest(q).filter((e: Entry) => !skip(e));
         if (sug.length) {

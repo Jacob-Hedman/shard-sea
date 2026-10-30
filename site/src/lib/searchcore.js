@@ -1,5 +1,6 @@
 // Search core, shared by the search palette (components/GlobalSearch.astro), the
 // browse pages' text box (scripts/browse.ts) and scripts/search-selftest.mjs.
+// Ported from the D&D 3.5 Codex; the phrase parser reads Shard-sea's own sections and facets.
 // Plain JS so Node can run the self-test without a build.
 //
 //   norm / tokens   fold accents, apostrophes, punctuation and plurals, so
@@ -7,8 +8,8 @@
 //   NameIndex       names (plus the alternate names export-data.mjs adds) -> ranked
 //                   matches: words in any order, the last word may be unfinished,
 //                   small typos forgiven ("magic misile")
-//   parseQuery      spots words that name a filter — "3rd level", "evocation",
-//                   "wizard", "fire", "feats" — so a phrase can become filters
+//   parseQuery      spots words that name a section and its filters — "feats",
+//                   "vitality", "tier 2", "ranged" — so a phrase can become filters
 //   makeTextFilter  the browse box: every word (or its start) somewhere in the row
 
 const MARKS = /[̀-ͯ]/g;
@@ -193,152 +194,82 @@ export class NameIndex {
   }
 }
 
-// ---- names typed on the character sheet ------------------------------------------
-
-/** The kinds each list of the character sheet links to first. */
-const LINK_KINDS = {
-  features: ['feat', 'special_ability', 'god_ability', 'class', 'race', 'template', 'maneuver', 'domain'],
-  spells: ['spell', 'power', 'maneuver', 'utterance', 'mystery'],
-  weapons: ['equipment', 'item'],
-  armor: ['equipment', 'item'],
-  possessions: ['item', 'equipment'],
-};
-
-/**
- * The entry a name typed in a list of the character sheet links to (its ↗ link, and the Foundry
- * export). Stricter than search, since the name is complete: every typed word is a whole word of the
- * entry's name, and the entry's name adds only qualifiers, a bracketed part ("Scroll of Miracle
- * (Divine)") or a bonus ("Cloak of Resistance +1"); for gear also a comma part of a mundane item
- * ("Horse, Pony"). So "Smite" doesn't link Smite Fiery Foe, nor "Divine CL" Divine Cleansing.
- * Tried as typed, then without parentheses ("Weapon Focus (Longsword)"), without a count
- * ("(4) Javelins") and, for weapons and armor, without a bonus ("+1 Longsword").
- * @param {NameIndex} index @param {string} name @param {string} list features, spells, weapons, armor or possessions
- * @returns {Entry | null}
- */
-export function linkEntry(index, name, list) {
-  const prefer = /** @type {Record<string, string[]>} */ (LINK_KINDS)[list] ?? [];
-  /** @param {Entry} e */
-  const rank = (e) => prefer.indexOf(e.k) + 1 || 99;
-  const gear = ['weapons', 'armor', 'possessions'].includes(list);
-  const bare = name.replace(/\s*\(.*?\)\s*/g, ' ');
-  const tries = [name, bare, name.replace(/^\(\d+\)\s*|\s*\(\d+x?\)$/g, '')];
-  if (list === 'weapons' || list === 'armor') tries.push(bare.replace(/(^|\s)\+\d+(?=\s|$)/g, ' '));
-  for (const t of [...new Set(tries.map((x) => x.trim()))]) {
-    if (!t) continue;
-    // No typo, and not a much longer name.
-    const hits = index.search(t, { limit: 12 }).filter((h) => h.fz === 0 && h.tier <= 2.35 && names(h.e, t, gear));
-    if (!hits.length) continue;
-    const best = hits[0].tier;
-    return hits.filter((h) => h.tier <= best + 0.3).sort((a, b) => rank(a.e) - rank(b.e) || a.tier - b.tier)[0].e;
-  }
-  return null;
-}
-
-/** Whether a typed name names the entry, for linkEntry. @param {Entry} e @param {string} typed @param {boolean} gear */
-function names(e, typed, gear) {
-  const q = new Set(tokens(typed));
-  const bonus = /^\+\d+$/;
-  return [e.n, ...(e.a || [])].some((f) => {
-    const all = new Set(tokens(f));
-    if (![...q].every((w) => all.has(w))) return false;
-    const parts = f.replace(/\s*[([][^)\]]*[)\]]\s*/g, ' ').split(',').map(tokens);
-    return parts.every((p) => p.every((w) => q.has(w) || bonus.test(w)) || (gear && e.k === 'equipment' && !p.some((w) => q.has(w))));
-  });
-}
-
 // ---- query understanding ---------------------------------------------------------
-const KIND_WORDS = new Map(Object.entries({
-  spell: 'spell', spells: 'spell', power: 'power', powers: 'power', feat: 'feat', feats: 'feat',
-  class: 'class', classes: 'class', item: 'item', items: 'item', race: 'race', races: 'race',
-  domain: 'domain', domains: 'domain', skill: 'skill', skills: 'skill', maneuver: 'maneuver',
-  maneuvers: 'maneuver', template: 'template', templates: 'template',
-}));
-const STOP = new Set(['a', 'an', 'the', 'of', 'for', 'with', 'that', 'to', 'in', 'and', 'or', 'on', 'my', 'any']);
+const STOP = new Set(['a', 'an', 'the', 'of', 'for', 'with', 'that', 'to', 'in', 'and', 'or', 'on', 'my', 'any', 'all']);
+// Never filter values: provenance is a toggle, not a word in a phrase.
+const SKIP_FIELDS = new Set(['content_type', 'license', 'source']);
 
 /**
  * @typedef {{ field: string, value: string, label: string, from: number, to: number }} Cue
  * @typedef {{ structured: boolean, kind: string | null, prestige: boolean, cues: Cue[], rest: string,
  *   words: string[], kindAt: [number, number] | null }} Parsed
- * @typedef {{ spell?: Record<string, string[]>, power?: Record<string, string[]> }} Facets
+ * @typedef {Record<string, Record<string, string[]>>} Facets  kind -> facet field -> its values
+ * @typedef {Record<string, string>} KindWords  a section word ("feats", "magic items") -> kind
  */
 
 /**
- * Find the words that name a filter. Only "structured" when the phrase clearly asks for
- * filters (a level, a school or discipline, a section word with something else, or two
- * filter words like "wizard fire"), so a plain name ("bulls strength") is never turned
- * into filters.
- * @param {string} query @param {Facets | null} facets @returns {Parsed}
+ * Find the words that name a section and its filters: "vitality feats tier 2" becomes
+ * Feats × Skill: Vitality × Tier 2, "ranged weapons" Weapons × Mode: Ranged. A phrase is
+ * only "structured" when it names a section, so a plain name ("vitality") is never turned
+ * into filters. When several words name sections ("action feats"), the one whose filters
+ * explain the most of the other words wins (ties: the last).
+ * @param {string} query @param {Facets | null} facets @param {KindWords} [kindWords] @returns {Parsed}
  */
-export function parseQuery(query, facets) {
+export function parseQuery(query, facets, kindWords = {}) {
   const words = norm(query).split(' ').filter(Boolean);
-  /** @type {Cue[]} */
-  const cues = [];
-  const used = new Array(words.length).fill(false);
-  /** @type {string | null} */
-  let kind = null;
-  /** @type {[number, number] | null} */
-  let kindAt = null;
-  let prestige = false;
-  /** @param {number} from @param {number} to @param {{ field: string, value: string, label: string }} c */
-  const take = (from, to, c) => {
-    for (let i = from; i < to; i++) used[i] = true;
-    cues.push({ ...c, from, to });
-  };
-  /** @param {string[] | undefined} vals */
-  const dict = (vals) => new Map((vals || []).map((v) => [norm(v), v]));
-  const sp = facets?.spell || {};
-  const pw = facets?.power || {};
-  const schools = dict(sp.school);
-  const discs = dict(pw.discipline);
-  const classes = dict([...(sp.class || []), ...(pw.class || [])]);
-  const descr = dict([...(sp.descriptor || []), ...(pw.descriptor || [])]);
-  /** the longest facet value (up to 3 words) starting at word i @param {Map<string, string>} map @param {number} i */
-  const lookup = (map, i) => {
-    for (let n = 3; n >= 1; n--) {
-      if (i + n > words.length || words.slice(i, i + n).some((_, j) => used[i + j])) continue;
-      const ph = words.slice(i, i + n);
-      const exact = map.get(ph.join(' '));
-      if (exact) return /** @type {[string, number]} */ ([exact, n]);
-      const st = map.get(ph.map(stem).join(' ')); // "wizards"
-      if (st) return /** @type {[string, number]} */ ([st, n]);
-    }
-    return null;
-  };
+  const kw = new Map(Object.entries(kindWords).map(([k, v]) => [norm(k), v]));
+  /** @type {{ kind: string, at: [number, number] }[]} */
+  const kinds = [];
   for (let i = 0; i < words.length; i++) {
-    if (used[i]) continue;
-    const w = words[i];
-    const nx = words[i + 1];
-    let m = /^(\d)(?:st|nd|rd|th)?$/.exec(w);
-    if (m && (nx === 'level' || nx === 'lvl')) { take(i, i + 2, { field: 'level', value: m[1], label: `Level ${m[1]}` }); i++; continue; }
-    if ((w === 'level' || w === 'lvl') && nx && /^\d$/.test(nx)) { take(i, i + 2, { field: 'level', value: nx, label: `Level ${nx}` }); i++; continue; }
-    m = /^(?:lvl|lv)(\d)$/.exec(w);
-    if (m) { take(i, i + 1, { field: 'level', value: m[1], label: `Level ${m[1]}` }); continue; }
-    if (w === 'prestige' && (nx === 'class' || nx === 'classes')) {
-      kind = 'class'; prestige = true; kindAt = [i, i + 2]; used[i] = used[i + 1] = true; i++; continue;
+    for (let n = 3; n >= 1; n--) {
+      if (i + n > words.length) continue;
+      const ph = words.slice(i, i + n);
+      const k = kw.get(ph.join(' ')) ?? kw.get(ph.map(stem).join(' '));
+      if (k) { kinds.push({ kind: k, at: [i, i + n] }); i += n - 1; break; }
     }
-    const kw = KIND_WORDS.get(w);
-    if (kw && !kind) { kind = kw; kindAt = [i, i + 1]; used[i] = true; continue; }
-    let hit = lookup(schools, i);
-    if (hit) { take(i, i + hit[1], { field: 'school', value: hit[0], label: hit[0] }); i += hit[1] - 1; continue; }
-    hit = lookup(discs, i);
-    if (hit) { take(i, i + hit[1], { field: 'discipline', value: hit[0], label: hit[0] }); kind ??= 'power'; i += hit[1] - 1; continue; }
-    hit = lookup(classes, i);
-    if (hit) {
-      const end = i + hit[1];
-      take(i, end, { field: 'class', value: hit[0], label: hit[0] });
-      if (words[end] && /^\d$/.test(words[end]) && !used[end]) take(end, end + 1, { field: 'level', value: words[end], label: `Level ${words[end]}` }); // "wizard 3"
-      i = end - 1 + (used[end] ? 1 : 0);
-      continue;
-    }
-    hit = lookup(descr, i);
-    if (hit) { take(i, i + hit[1], { field: 'descriptor', value: hit[0], label: hit[0] }); i += hit[1] - 1; continue; }
   }
-  const rest = words.filter((w, i) => !used[i] && !STOP.has(w)).join(' ');
-  const fields = new Set(cues.map((c) => c.field));
-  const structured =
-    fields.has('level') || fields.has('school') || fields.has('discipline') || (!!kind && (cues.length > 0 || !!rest)) || cues.length >= 2;
-  if (!kind && cues.length) kind = fields.has('discipline') ? 'power' : 'spell';
-  return { structured, kind, prestige, cues, rest, words, kindAt };
+  /** @param {string} kind @param {[number, number]} at */
+  const cuesFor = (kind, at) => {
+    const used = words.map((_, i) => i >= at[0] && i < at[1]);
+    /** @type {Cue[]} */
+    const cues = [];
+    const dicts = Object.entries(facets?.[kind] ?? {})
+      .filter(([f]) => !SKIP_FIELDS.has(f))
+      .map(([field, vals]) => ({ field, map: new Map(vals.flatMap((v) => [[norm(v), v], [norm(v).split(' ').map(stem).join(' '), v]])) }));
+    for (let i = 0; i < words.length; i++) {
+      if (used[i]) continue;
+      // "t2" is Tier 2
+      const t = /^t(\d)$/.exec(words[i]);
+      const probe = t ? ['tier', t[1]] : null;
+      let hit = null;
+      for (let n = 3; n >= 1 && !hit; n--) {
+        if (i + n > words.length || words.slice(i, i + n).some((_, j) => used[i + j])) continue;
+        const ph = probe && n === 1 ? probe : words.slice(i, i + n);
+        for (const d of dicts) {
+          const v = d.map.get(ph.join(' ')) ?? d.map.get(ph.map(stem).join(' '));
+          if (v) { hit = { field: d.field, value: v, n }; break; }
+        }
+      }
+      if (!hit) continue;
+      for (let j = i; j < i + hit.n; j++) used[j] = true;
+      cues.push({ field: hit.field, value: hit.value, label: hit.value, from: i, to: i + hit.n });
+      i += hit.n - 1;
+    }
+    return { cues, used };
+  };
+  let best = null;
+  for (const k of kinds) {
+    const r = cuesFor(k.kind, k.at);
+    if (!best || r.cues.length >= best.r.cues.length) best = { k, r };
+  }
+  if (!best) {
+    const rest = words.filter((w) => !STOP.has(w)).join(' ');
+    return { structured: false, kind: null, prestige: false, cues: [], rest, words, kindAt: null };
+  }
+  const { k, r } = best;
+  // other section words stay as text only when they were not the chosen one
+  const rest = words.filter((w, i) => !r.used[i] && !STOP.has(w)).join(' ');
+  return { structured: r.cues.length > 0 || !!rest, kind: k.kind, prestige: false, cues: r.cues, rest, words, kindAt: k.at };
 }
 
 /** The query minus some word positions (used when a filter chip is removed).

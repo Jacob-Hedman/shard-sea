@@ -71,48 +71,48 @@ function loginPage(nextPath, failed) {
 <meta name="robots" content="noindex, nofollow" />
 <title>Shard-sea Codex — sign in</title>
 <style>
+  /* Codex 1.0, inverted: black paper, hard white rules, red marks. System fonts only,
+     since the site's own font files sit behind this gate. */
   :root { color-scheme: dark; }
   * { box-sizing: border-box; margin: 0; }
   body {
-    min-height: 100vh; display: grid; place-items: center;
-    background: #0b0c0e; color: #f3f4f6;
-    font: 15px/1.6 Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-    background-image: radial-gradient(64rem 26rem at 50% -10rem, rgba(217,165,94,.08), transparent 70%);
+    min-height: 100vh; display: grid; place-items: center; padding: 16px;
+    background: #000; color: #fff;
+    font: 15px/1.55 "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
   }
   .card {
-    width: min(92vw, 24rem); padding: 2.25rem 2rem 2rem;
-    background: #141619; border: 1px solid #21242a; border-radius: 12px;
-    box-shadow: 0 24px 60px -30px rgba(0,0,0,.8);
+    width: min(100%, 26rem); padding: 1.75rem 1.75rem 1.5rem;
+    background: #000; border: 2px solid #fff; box-shadow: 5px 5px 0 #fff;
   }
-  h1 {
-    font-size: 1.5rem; letter-spacing: -.02em; text-align: center;
-    background: linear-gradient(135deg, #f3f4f6, #d9a55e);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  p.sub { margin-top: .4rem; text-align: center; font-size: .8rem; color: #646b75; }
-  form { margin-top: 1.5rem; display: grid; gap: .6rem; }
+  .code { font: 12px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; color: #a3a3a3; text-transform: uppercase; }
+  .code b { color: #ff5a4a; font-weight: 600; }
+  h1 { margin-top: .9rem; font-size: 2rem; line-height: 1.05; letter-spacing: -.03em; font-weight: 800; }
+  h1 span { display: inline-block; width: .5em; height: .5em; margin-left: .12em; background: #ff2a1a; }
+  p.sub { margin-top: .6rem; padding-top: .6rem; border-top: 1px solid #fff; font-size: .85rem; color: #d4d4d4; }
+  form { margin-top: 1.25rem; display: grid; gap: .6rem; }
   input[type=password] {
-    width: 100%; padding: .65rem .8rem; font: inherit; color: #f3f4f6;
-    background: #0b0c0e; border: 1px solid #2e323a; border-radius: 8px; outline: none;
+    width: 100%; padding: .7rem .8rem; font: inherit; color: #fff;
+    background: #000; border: 2px solid #fff; border-radius: 0; outline: none;
   }
-  input[type=password]:focus { border-color: #d9a55e; }
+  input[type=password]:focus { border-color: #ff2a1a; box-shadow: 3px 3px 0 #ff2a1a; }
   button {
-    padding: .65rem .8rem; font: inherit; font-weight: 600; cursor: pointer;
-    color: #0b0c0e; background: #d9a55e; border: 0; border-radius: 8px;
+    padding: .7rem .8rem; font: inherit; font-weight: 700; cursor: pointer; text-align: left;
+    color: #000; background: #fff; border: 2px solid #fff; border-radius: 0;
   }
-  button:hover { background: #ecc488; }
-  .err { text-align: center; font-size: .8rem; color: #c98a4a; min-height: 1.2em; }
+  button:hover, button:focus-visible { background: #ff2a1a; border-color: #ff2a1a; color: #000; outline: none; }
+  .err { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #ff5a4a; min-height: 1.4em; }
 </style>
 </head>
 <body>
   <main class="card">
-    <h1>Shard-sea Codex</h1>
-    <p class="sub">Private playtest archive — enter the password to continue.</p>
+    <div class="code"><b>SSC</b> · Codex 1.0 · Private</div>
+    <h1>Shard-sea Codex<span aria-hidden="true"></span></h1>
+    <p class="sub">Private playtest archive. Enter the password to continue.</p>
     <form method="post" action="/__login">
       <input type="hidden" name="next" value="${escAttr(nextPath)}" />
       <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password" required />
-      <button type="submit">Open the codex</button>
-      <div class="err">${failed ? 'Wrong password — nothing stirs.' : ''}</div>
+      <button type="submit">Open the codex →</button>
+      <div class="err">${failed ? 'Wrong password. Nothing stirs.' : ''}</div>
     </form>
   </main>
 </body>

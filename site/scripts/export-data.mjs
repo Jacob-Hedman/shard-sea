@@ -45,6 +45,9 @@ function snippet(s, n = 200) {
   return t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t;
 }
 const arr = (v) => (v == null || v === '' ? [] : [String(v)]);
+// An Obsidian image embed (![[…/NAME.webp]]) is not text: the importer's plain-text summary
+// keeps it as "!NU PHB…/NAME.webp". Pages render the image itself (src/lib/md.ts).
+const noEmbeds = (s) => String(s ?? '').replace(/!\[\[[^\]]*\]\]/g, '').replace(/!\S*?(?:\s\S+?){0,3}?\.(?:webp|png|jpe?g)\b/gi, '').replace(/[ \t]{2,}/g, ' ').trim();
 
 // Provenance is uniform (one game, one source) but the site's card/search
 // plumbing expects these fields — set them to sensible constants.
@@ -507,13 +510,13 @@ for (const cfg of SIMPLE_KINDS) {
       source: SOURCE, content_type: CT, license: LICENSE,
       chapter, chapter_no: p.chapter_no, section_order: p.section_order, section,
       role: p.role, source_path: p.source_path, record_count: p.record_count,
-      summary: p.summary || '', body_md: p.body_md || '', text: p.body_md || '',
+      summary: noEmbeds(p.summary), body_md: p.body_md || '', text: p.body_md || '',
       facets: { ...provFacets(SOURCE), chapter: arr(chapter) },
     };
     full.push(rec);
     index.push({
       id: p.id, slug: p.slug, name: p.title, kind: 'page',
-      sub: chapter, desc: snippet(p.summary || p.body_md), section,
+      sub: chapter, desc: snippet(noEmbeds(p.summary || p.body_md)), section,
       source: SOURCE, content_type: CT, license: LICENSE, facets: rec.facets,
     });
   }

@@ -15,10 +15,6 @@ const attrs = rec.attrs ?? {};
 
 // Long sub-label blocks (Time, Procedure, Limits, Collaboration…) read as
 // sections, not as cramped stat rows — this is what Activities are made of.
-const longBlocks = Object.entries(attrs).filter(
-  ([k, v]) => !SKIP.has(k) && typeof v === 'string' && v.length > SHORT,
-) as [string, string][];
-
 // A lead paragraph (the descriptive text), then an "Effect" section only when
 // the mechanics text actually differs from it — so descriptive-only kinds
 // (resources, weapon traits) aren't mislabelled "Effect" or shown twice.
@@ -27,6 +23,13 @@ const longBlocks = Object.entries(attrs).filter(
 const lead = rec.summary || attrs.description || (rec.text !== rec.effects ? rec.text : '') || '';
 const effectText = rec.effects && String(rec.effects).trim() && rec.effects !== lead
   ? rec.effects : '';
+// Long sub-label blocks (Time, Procedure, Limits, Collaboration…) read as sections, not as
+// cramped stat rows; this is what Activities are made of. A block that repeats the lead or
+// the effect (a District's "Effects") is left out.
+const same = (a: unknown, b: unknown) => String(a ?? '').replace(/\s+/g, ' ').trim() === String(b ?? '').replace(/\s+/g, ' ').trim();
+const longBlocks = (Object.entries(attrs).filter(
+  ([k, v]) => !SKIP.has(k) && typeof v === 'string' && v.length > SHORT,
+) as [string, string][]).filter(([, v]) => !same(v, lead) && !same(v, effectText));
 ---
 
 <div class="file-main">
@@ -48,7 +51,7 @@ const effectText = rec.effects && String(rec.effects).trim() && rec.effects !== 
 </div>
 <aside class="file-side">
   {rec.discipline_slug && (
-    <a href={hrefFor('discipline', rec.discipline_slug)} class="side-link"><Icon name="arrow-left" /> {rec.discipline_name}</a>
+    <a href={hrefFor('discipline', rec.discipline_slug)} class="side-link"><Icon name="arrow-left" /> All of {rec.discipline_name}</a>
   )}
   <slot name="side" />
 </aside>

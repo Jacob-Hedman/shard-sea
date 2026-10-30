@@ -1,8 +1,10 @@
 ---
+import { withoutLead } from '../../lib/format';
 import Prose from '../Prose.astro';
 
 interface Props { rec: any; }
 const { rec } = Astro.props;
+const special = withoutLead(rec.special, rec.summary);
 const LABEL = 'subh';
 const traits = String(rec.traits || '').split(/,\s*/).map((s) => s.trim()).filter(Boolean);
 ---
@@ -18,10 +20,10 @@ const traits = String(rec.traits || '').split(/,\s*/).map((s) => s.trim()).filte
         </div>
       </section>
     )}
-    {rec.special && (
+    {special && (
       <section>
         <h2 class={LABEL}>Special</h2>
-        <Prose text={rec.special} />
+        <Prose text={special} />
       </section>
     )}
   </div>

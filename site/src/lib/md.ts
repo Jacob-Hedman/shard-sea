@@ -2,7 +2,11 @@
 // The source is the game's own Obsidian vault (see importer). We escape HTML
 // first, then emit only our own tags, so `set:html` is safe. Covers the subset
 // the book actually uses: headings, bold/italic, backtick RULES text, lists,
-// blockquotes-as-paragraphs, wiki-links, and preserves authored line breaks.
+// blockquotes-as-paragraphs, wiki-links, image embeds (![[…/NAME.webp]] -> the web
+// copy scripts/phb-images.py made in public/img/phb/), and preserves authored line breaks.
+
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 const esc = (s: string) => s.replace(/[&<>]/g, (c) => ESC[c]);
@@ -40,6 +44,16 @@ export function renderMarkdown(md?: string | null): string {
   for (const raw of lines) {
     const line = raw.replace(/\s+$/, '');
     if (!line.trim()) { flushPara(); flushList(); flushQuote(); continue; }
+
+    // an embedded image on its own line: show the web copy, or drop it if there is none
+    const img = /^!\[\[([^\]|]+?)\.(webp|png|jpe?g)(?:\|[^\]]*)?\]\]$/i.exec(line.trim());
+    if (img) {
+      flushPara(); flushList(); flushQuote();
+      const name = img[1].split('/').pop()!;
+      if (existsSync(join(process.cwd(), 'public', 'img', 'phb', `${name}.webp`)))
+        out.push(`<figure class="phb-img"><img src="/img/phb/${encodeURIComponent(name)}.webp" alt="${esc(name.replace(/[_-]+/g, ' ').toLowerCase())}" loading="lazy" decoding="async"></figure>`);
+      continue;
+    }
 
     const bq = /^>\s?(.*)$/.exec(line);
     if (bq) { flushPara(); flushList(); quote.push(bq[1]); continue; }
